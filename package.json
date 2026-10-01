@@ -1,0 +1,52 @@
+{
+  "name": "inventory-management-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inventory, manufacturing and sales system (FIFO stock ledger, workshop, sales, eTIMS)",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build:shared": "npm run build -w shared",
+    "dev": "npm run build:shared && concurrently -k -n shared,server,client -c magenta,blue,green \"npm:dev -w shared\" \"npm:dev -w server\" \"npm:dev -w client\"",
+    "build": "npm run build:shared && npm run build -w server && npm run build -w client",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run build:shared && npm run typecheck --workspaces",
+    "test": "npm run build:shared && npm run test --workspaces",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs}": [
+      "eslint --max-warnings=0 --fix",
+      "prettier --write"
+    ],
+    "*.{json,yml,yaml,css,html}": "prettier --write"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.5",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0"
+  },
+  "config": {
+    "mongodbMemoryServer": {
+      "downloadDir": "node_modules/.cache/mongodb-memory-server"
+    }
+  }
+}
