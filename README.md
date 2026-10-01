@@ -18,6 +18,49 @@ sells** tables, accessories and services to a wide customer base.
 
 React + TypeScript · Node.js + Express + TypeScript · MongoDB (Atlas M0 in development)
 
+## Running locally
+
+**Prerequisites:** Node.js 22.12+ (see `.nvmrc`) and npm 10+. A MongoDB is optional
+in development: see step 2.
+
+```bash
+npm install          # installs all workspaces; also downloads a test mongod binary (~100 MB, once)
+cp .env.example .env # optional; edit as needed
+npm run dev          # client on http://localhost:5173, API on http://localhost:4000/api/v1
+```
+
+1. **Open the app** at <http://localhost:5173>. The *System status* page (bottom of the
+   sidebar) calls `GET /api/v1/health` and shows the API and MongoDB status.
+2. **Database.** Set `MONGODB_URI` in `.env` to your Atlas M0 connection string. If you
+   leave it empty, the dev server starts a throwaway **in-memory replica set** and
+   warns you that data won't persist. It must be a replica set either way, because stock
+   postings run inside transactions.
+3. The Vite dev server proxies `/api` to the API, so the browser only talks to one origin.
+
+### Scripts (repo root)
+
+| Script | What it does |
+|---|---|
+| `npm run dev` | Builds `shared`, then runs `shared` (watch), `server` (tsx watch) and `client` (Vite) together |
+| `npm run build` | Production build of `shared`, `server` (`server/dist`) and `client` (`client/dist`) |
+| `npm run lint` | ESLint across the repo (zero warnings allowed) |
+| `npm run format` / `format:check` | Prettier (Markdown docs are excluded) |
+| `npm run typecheck` | `tsc --noEmit` in every workspace |
+| `npm test` | Vitest in every workspace. Server tests use `mongodb-memory-server` in replica-set mode |
+
+A husky pre-commit hook runs lint-staged (ESLint + Prettier on staged files). CI
+(GitHub Actions) runs install → lint → format check → typecheck → test → build on every
+push and pull request.
+
+### Layout
+
+```text
+client/   React + Vite + Tailwind + React Router + TanStack Query
+server/   Express + Mongoose API (src/config, middleware, modules/<module>, engine, integrations, jobs)
+shared/   zod schemas and types used by both (@ims/shared)
+docs/     specification, phases, decisions
+```
+
 ## Documentation
 
 | Document | Purpose |
@@ -29,4 +72,4 @@ React + TypeScript · Node.js + Express + TypeScript · MongoDB (Atlas M0 in dev
 
 ## Status
 
-📐 Specification complete. **Next: Phase 0 (project setup).**
+✅ Phase 0 (project setup) complete. **Next: Phase 1 (foundation).**

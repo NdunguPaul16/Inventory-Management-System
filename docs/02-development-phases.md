@@ -30,20 +30,35 @@ Section references (§) point to [`01-project-specification.md`](./01-project-sp
 **Goal:** an empty but production-shaped codebase that anyone can clone and run.
 
 Tasks:
-- [ ] Monorepo with npm workspaces: `client/`, `server/`, `shared/` (§2.1)
-- [ ] `server`: Express + TS, `tsx`/`nodemon` dev, `pino` logging, error handler, `/api/v1/health`
-- [ ] `client`: Vite + React + TS + Tailwind + React Router + TanStack Query; base layout (navy sidebar, top bar)
-- [ ] `shared`: zod + shared types package
-- [ ] MongoDB connection (Atlas M0 dev); `mongodb-memory-server` **replica set** for tests (transactions need one)
-- [ ] ESLint, Prettier, `tsconfig` strict, husky + lint-staged
-- [ ] Vitest (client), Jest/Vitest + Supertest (server)
-- [ ] GitHub Actions CI: install → lint → type-check → test on every push / PR
-- [ ] `.env.example`, `README` run instructions
-- [ ] `counters` service for document numbering (atomic `$inc`)
+- [x] Monorepo with npm workspaces: `client/`, `server/`, `shared/` (§2.1)
+- [x] `server`: Express + TS, `tsx`/`nodemon` dev, `pino` logging, error handler, `/api/v1/health`
+- [x] `client`: Vite + React + TS + Tailwind + React Router + TanStack Query; base layout (navy sidebar, top bar)
+- [x] `shared`: zod + shared types package
+- [x] MongoDB connection (Atlas M0 dev); `mongodb-memory-server` **replica set** for tests (transactions need one)
+- [x] ESLint, Prettier, `tsconfig` strict, husky + lint-staged
+- [x] Vitest (client), Jest/Vitest + Supertest (server)
+- [x] GitHub Actions CI: install → lint → type-check → test on every push / PR
+- [x] `.env.example`, `README` run instructions
+- [x] `counters` service for document numbering (atomic `$inc`)
 
 **Acceptance criteria:**
 - `npm install && npm run dev` starts the client and server; health check returns DB status.
 - CI is green on `dfstock`.
+
+**How they were met (2026-10-01):**
+- `npm run dev` builds `shared`, then runs `shared`, `server` and `client` together with
+  `concurrently`. Checked by hand: `GET http://localhost:5173/api/v1/health` (through the
+  Vite proxy) returns `200` with `db: { status: "up", state: "connected", latencyMs }`.
+  The *System status* page shows the result at desktop and phone width. With no
+  `MONGODB_URI`, the dev server starts an in-memory replica set so a fresh clone runs
+  without any setup. `server/test/health.test.ts` covers the up case and the `503`
+  "degraded" case (DB disconnected).
+- `.github/workflows/ci.yml` runs install → lint → format check → typecheck → test → build
+  on every push and PR. It passes locally (`npm run lint`, `npm run typecheck`, `npm test`,
+  `npm run build`). It turns green on `dfstock` once the `phase-0/setup` PR is merged.
+- Replica-set transactions: `server/test/transaction.test.ts` (commit, abort/rollback,
+  isolation). Counters: `server/test/counters.test.ts` (format, per-year reset in
+  Africa/Nairobi time, 50 parallel calls with no duplicates, rollback with the transaction).
 
 ---
 
