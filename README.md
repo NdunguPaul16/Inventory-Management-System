@@ -25,6 +25,7 @@ React + TypeScript · Node.js + Express + TypeScript · MongoDB (Atlas M0 in dev
 | [Project specification](docs/01-project-specification.md) | Master blueprint: domain rules, FIFO engine, modules, data model, API, pages |
 | [Development phases](docs/02-development-phases.md) | Phase-by-phase build plan with tasks and acceptance criteria |
 | [Decisions log](docs/03-decisions-log.md) | Decided items and open questions with working assumptions |
+| [Claude Code prompts](docs/04-claude-code-prompts.md) | Ready-to-paste prompts for building each phase with Claude Code |
 
 ## Status
 
