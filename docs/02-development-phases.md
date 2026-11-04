@@ -89,7 +89,18 @@ Frontend:
 
 ## Phase 2 — Stock engine & inventory
 
+
+
 **Goal:** the FIFO heart of the system. (§3, §5)
+
+**Progress note (2026-11-04):** implementation has started at the user's direction while
+Phase 1 remains incomplete. Core ledger models, FIFO posting services, transfer/reversal logic,
+balance reconciliation, shared request schemas, and permission-gated inventory routes have
+been added. Authentication now populates the permission context. Opening stock,
+adjustments and reversals use request → approval → posting records with restricted role
+permissions; FIFO layers persist rounded remaining cents so transfers and reversals carry
+recorded costs. Configurable approval thresholds, the CSV/Excel opening-stock wizard,
+count workflows, and the Phase 2 acceptance tests are still outstanding.
 
 Backend:
 - [ ] `engine/` service: `postIn`, `postOut`, `transfer`, `reverse`; all calls run inside Mongo transactions

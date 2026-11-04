@@ -72,4 +72,18 @@ docs/     specification, phases, decisions
 
 ## Status
 
-✅ Phase 0 (project setup) complete. **Next: Phase 1 (foundation).**
+The Phase 0 scaffold is committed on `phase-0/setup` and has not yet been merged
+into `dfstock`. Phase 1 authentication and roles, and the Phase 2 stock engine,
+are local work in progress. Master data, the opening-stock import wizard, stock
+counts and frontend inventory screens remain outstanding.
+
+### Controlled stock changes
+
+Opening stock, adjustments and reversals use an audited request → approval →
+posting flow. `POST /api/v1/inventory/opening-stock`, `/adjustments`, or
+`/movements/:movementId/reverse` creates a pending request without moving stock.
+Authorised users review it through `GET /api/v1/inventory/requests`, then use
+`POST /api/v1/inventory/requests/:requestId/approve` or `/reject`. The approver
+posts an approved request with `POST /api/v1/inventory/requests/:requestId/post`.
+The request status, ledger movements and audit records commit in one MongoDB
+transaction. Existing `audit_log` records are moved to `audit_logs` at startup.
