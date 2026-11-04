@@ -8,5 +8,10 @@ export function createTestApp() {
     logger: silentLogger,
     environment: 'test',
     corsOrigins: ['http://localhost:5173'],
+    auth: {
+      accessTokenSecret: 'test-access-token-secret-that-is-at-least-32-characters',
+      refreshTokenSecret: 'test-refresh-token-secret-that-is-at-least-32-characters',
+      secureCookies: false,
+    },
   });
 }

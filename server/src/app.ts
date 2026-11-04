@@ -1,16 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import express, { Router, type Express } from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { Logger } from './config/logger.js';
 import { createErrorHandler, notFoundHandler } from './middleware/error-handler.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { inventoryRoutes } from './modules/inventory/routes.js';
+import { authRoutes } from './modules/auth/routes.js';
+import { userRoutes } from './modules/users/routes.js';
+import { roleRoutes } from './modules/roles/routes.js';
+import { authenticate } from './middleware/authenticate.js';
+import type { AuthConfig } from './modules/auth/service.js';
 
 export interface AppOptions {
   logger: Logger;
   environment: 'development' | 'test' | 'production';
   corsOrigins: string[];
+  auth: AuthConfig;
 }
 
 const REQUEST_ID_HEADER = 'x-request-id';
@@ -38,11 +46,16 @@ export function createApp(options: AppOptions): Express {
   // TODO(phase-10): set `trust proxy` once the production hosting is chosen.
   app.use(helmet());
   app.use(cors({ origin: options.corsOrigins, credentials: true }));
+  app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
+  app.use(authenticate(options.auth));
 
   const api = Router();
   api.use('/health', healthRoutes(options.environment));
-  // TODO(phase-1): auth, users/roles, settings and master data routes, each behind requirePermission().
+  api.use('/auth', authRoutes(options.auth));
+  api.use('/users', userRoutes);
+  api.use('/roles', roleRoutes);
+  api.use('/inventory', inventoryRoutes);
   app.use('/api/v1', api);
 
   app.use(notFoundHandler);

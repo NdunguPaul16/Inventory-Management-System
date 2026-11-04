@@ -3,6 +3,9 @@ import { appInfo } from './config/app-info.js';
 import { connectDbWithRetry, disconnectDb } from './config/db.js';
 import { EnvValidationError, loadEnvFile, parseEnv } from './config/env.js';
 import { createLogger } from './config/logger.js';
+import { migrateLegacyAuditLog } from './modules/audit/migrate.js';
+import { seedDefaultRoles } from './modules/roles/service.js';
+import { bootstrapAdministrator } from './modules/users/service.js';
 
 async function main(): Promise<void> {
   loadEnvFile();
@@ -22,7 +25,16 @@ async function main(): Promise<void> {
     stopInMemoryDb = () => replSet.stop();
   }
 
-  const app = createApp({ logger, environment: env.NODE_ENV, corsOrigins: env.CORS_ORIGINS });
+  const app = createApp({
+    logger,
+    environment: env.NODE_ENV,
+    corsOrigins: env.CORS_ORIGINS,
+    auth: {
+      accessTokenSecret: env.AUTH_ACCESS_TOKEN_SECRET,
+      refreshTokenSecret: env.AUTH_REFRESH_TOKEN_SECRET,
+      secureCookies: env.NODE_ENV === 'production',
+    },
+  });
   const server = app.listen(env.PORT, () => {
     logger.info(
       { port: env.PORT, env: env.NODE_ENV, version: appInfo.version },
@@ -35,7 +47,20 @@ async function main(): Promise<void> {
     dbName: env.MONGODB_DB_NAME,
     autoIndex: env.NODE_ENV !== 'production',
     logger,
-  });
+  })
+    .then(async () => {
+      await migrateLegacyAuditLog();
+      await seedDefaultRoles();
+      if (env.BOOTSTRAP_ADMIN_EMAIL && env.BOOTSTRAP_ADMIN_PASSWORD) {
+        const created = await bootstrapAdministrator(
+          env.BOOTSTRAP_ADMIN_EMAIL,
+          env.BOOTSTRAP_ADMIN_PASSWORD,
+        );
+        if (created)
+          logger.warn({ email: env.BOOTSTRAP_ADMIN_EMAIL }, 'Bootstrap administrator created');
+      }
+    })
+    .catch((err: unknown) => logger.error({ err }, 'Identity bootstrap failed'));
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {

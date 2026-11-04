@@ -199,7 +199,7 @@ calls. No module writes `stock_movements` or `cost_layers` directly.
               | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'COUNT_VARIANCE',
   unitCost: number,               // cents, weighted across layers consumed
   totalCost: number,              // cents
-  layersConsumed?: [{ layerId, quantity, unitCost }],  // OUT only
+  layersConsumed?: [{ layerId, quantity, unitCost, totalCost }],  // OUT only
   layerCreated?: ObjectId,        // IN only
   sourceDoc: { type, id, number, lineId },
   serialNumbers?: string[],
@@ -217,6 +217,8 @@ calls. No module writes `stock_movements` or `cost_layers` directly.
   receivedAt,                     // FIFO ordering key
   originalQty: Decimal128,
   remainingQty: Decimal128,
+  originalValue: number,           // recorded whole cents
+  remainingValue: number,          // authoritative whole cents after partial issues
   unitCost: number,               // cents, KES, includes allocated landed cost
   costHistory: [{ at, oldUnitCost, newUnitCost, reason, docRef }],
   currency?: { code, foreignUnitCost, rate }   // trace of import origin
@@ -246,15 +248,27 @@ postMovement(input):
        if not satisfied → abort (INSUFFICIENT_STOCK)
        write stock_movement(direction OUT, layersConsumed, totalCost)
     update stock_balances (onHand, value)
-    write audit_log
+    write audit_logs
   commit
 ```
 
 - **Transfers** consume layers at the source and recreate them at the destination,
-  keeping the original `receivedAt` and `unitCost`, so FIFO order is preserved.
+  keeping the original `receivedAt`, `unitCost` and recorded slice `totalCost`,
+  so FIFO order and total inventory value are preserved even for fractional quantities.
 - **Returns from customers** re-enter at the cost they left with (taken from the
   original sale movement's `layersConsumed`).
 - **Reversals** post the exact opposite movement and link `reversalOf`.
+  An outbound reversal re-enters at each original slice's recorded `totalCost`.
+  `remainingValue` is the source of truth for a layer's rounded cents; it is not
+  recalculated from `remainingQty × unitCost` during a transfer or reversal.
+
+**Controlled stock actions:** opening stock, adjustments and reversals create a
+`stock_action_requests` record first. An authorised approver reviews the request,
+and that approver posts it after approval. The posting uses the approved request
+as its source document and a stable idempotency key. Until configurable approval
+thresholds are delivered, every adjustment requires approval. A different user
+must approve a request, except that an Admin may self-approve opening stock
+before any operational stock movement exists; the override remains in the audit trail.
 
 ### 5.3 Late landed cost (revaluation)
 
@@ -477,10 +491,19 @@ admins can create custom roles.
 | **Accountant** | Receivables, payables, payments, valuation, VAT and margin reports, exports |
 | **Viewer / Auditor** | Read-only + audit log |
 
+The default Storekeeper role can view stock, request adjustments and post
+transfers. It cannot request opening stock or reversals, approve requests, or
+post adjustments. Opening-stock requests require Admin access. Managers can
+approve and post approved opening-stock, adjustment and reversal requests;
+Managers or Admins can request reversals. System role permissions are seeded
+from code and refreshed at startup; custom roles can be created separately.
+
 **Approval rules** (configurable in settings):
 
 - PO above amount X → Manager approval.
-- Any stock adjustment / count variance above value Y → Manager approval.
+- Any stock adjustment / count variance above value Y → Manager approval. Until
+  the threshold setting is available, every adjustment requires approval.
+- Opening stock and stock reversals require an approved request before posting.
 - Price override beyond Z% discount or below cost → Manager approval.
 - Invoice cancellation (credit note) → Manager approval.
 
@@ -495,7 +518,7 @@ admins can create custom roles.
 | Master data | `items`, `categories`, `units`, `locations`, `customer_groups`, `price_lists` |
 | Parties | `suppliers`, `customers`, `party_documents` |
 | Stock engine | `stock_movements`, `cost_layers`, `stock_balances`, `serial_numbers` |
-| Stock docs | `stock_adjustments`, `stock_transfers`, `stock_counts` |
+| Stock docs | `stock_action_requests` (approval control), `stock_adjustments`, `stock_transfers`, `stock_counts` |
 | Purchasing | `purchase_orders`, `import_shipments`, `goods_received_notes`, `supplier_invoices`, `landed_cost_vouchers`, `purchase_returns` |
 | Manufacturing | `boms`, `production_orders` |
 | Sales | `quotations`, `sales_orders`, `delivery_notes`, `invoices`, `credit_notes` |
@@ -524,7 +547,7 @@ only. Schedule `mongodump` backups from day one, and plan the paid tier before g
 | Auth | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` |
 | Users/roles | `GET/POST /users`, `PATCH /users/:id`, `GET/POST /roles` |
 | Items | `GET/POST /items`, `GET/PATCH /items/:id`, `GET /items/:id/stock`, `GET /items/:id/movements` |
-| Stock | `GET /stock/balances`, `GET /stock/movements`, `POST /stock/adjustments`, `POST /stock/adjustments/:id/approve`, `POST /stock/transfers`, `POST /stock/counts`, `POST /stock/counts/:id/post` |
+| Stock | `GET /inventory/balances`, `GET /inventory/items/:itemId/movements`, `POST /inventory/opening-stock`, `POST /inventory/adjustments`, `POST /inventory/movements/:movementId/reverse` (request creation), `GET /inventory/requests`, `POST /inventory/requests/:requestId/approve`, `POST /inventory/requests/:requestId/reject`, `POST /inventory/requests/:requestId/post`, `POST /inventory/transfers`; stock counts are pending |
 | Purchasing | `/purchase-orders`, `/purchase-orders/:id/approve`, `/import-shipments`, `/grns`, `/grns/:id/post`, `/supplier-invoices`, `/landed-costs`, `/landed-costs/:id/post`, `/purchase-returns` |
 | Manufacturing | `/boms`, `/boms/:id/copy`, `/production-orders`, `/production-orders/:id/release`, `/:id/issue`, `/:id/complete`, `/:id/close` |
 | Sales | `/quotations`, `/quotations/:id/convert`, `/sales-orders`, `/delivery-notes`, `/delivery-notes/:id/post`, `/invoices`, `/invoices/:id/issue`, `/invoices/:id/pdf`, `/credit-notes`, `/cash-sales` |

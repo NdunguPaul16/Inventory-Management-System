@@ -15,6 +15,9 @@ that depends on them.
 | D5 | **KRA eTIMS** integration is in scope | 2026-10-01 | Adapter + queue (§9) |
 | D6 | Stack: React + TS, Node/Express + TS, MongoDB (Atlas M0 in development) | 2026-10-01 | From the original business plan |
 | D7 | Money stored as integer cents; quantities as Decimal128 | 2026-10-01 | Avoids floating-point errors |
+| D8 | Opening stock, adjustments and reversals use recorded approval requests | 2026-11-04 | Approved request is the posting reference; all adjustments require approval until threshold settings exist. Admin may self-approve opening stock before operational movements exist, with an explicit audit marker. |
+| D9 | FIFO layers persist remaining value in whole cents | 2026-11-04 | Transfers and reversals carry the original movement slice's recorded total cost; fractional quantities cannot add value through a second rounding. |
+| D10 | `audit_logs` is the single audit collection | 2026-11-04 | Stock, user, role, approval and authentication state changes use it; legacy `audit_log` entries are migrated at startup. |
 
 ## Open (with working assumptions)
 

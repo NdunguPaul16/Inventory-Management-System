@@ -23,4 +23,12 @@ export class AppError extends Error {
   static conflict(message: string, details?: unknown) {
     return new AppError(409, 'CONFLICT', message, details);
   }
+
+  static unauthenticated(message = 'Authentication is required') {
+    return new AppError(401, 'UNAUTHENTICATED', message);
+  }
+
+  static forbidden(message = 'You do not have permission to perform this action') {
+    return new AppError(403, 'FORBIDDEN', message);
+  }
 }
