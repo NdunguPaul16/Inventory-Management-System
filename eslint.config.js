@@ -20,11 +20,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ['server/**/*.ts', 'shared/**/*.ts', '*.js'],
+    files: ['backend/**/*.ts', 'shared/**/*.ts', '*.js', 'frontend/vercel.mjs'],
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['client/**/*.{ts,tsx}'],
+    files: ['frontend/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {

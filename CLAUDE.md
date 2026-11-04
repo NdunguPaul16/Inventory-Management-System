@@ -18,15 +18,15 @@ Work **one phase at a time**. Don't build features from later phases. Leave a
 
 ## Stack
 
-- Monorepo with npm workspaces: `client/` (React + TS + Vite + Tailwind + React Router + TanStack Query),
-  `server/` (Node + Express + TS + Mongoose), `shared/` (zod schemas + types)
+- Monorepo with npm workspaces: `frontend/` (React + TS + Vite + Tailwind + React Router + TanStack Query),
+  `backend/` (Node + Express + TS + Mongoose), `shared/` (zod schemas + types)
 - MongoDB: Atlas M0 in development; `mongodb-memory-server` **replica set** in tests
-- Tests: Vitest (client), Vitest or Jest + Supertest (server)
+- Tests: Vitest (frontend), Vitest or Jest + Supertest (backend)
 
 ## Non-negotiable rules (spec §3)
 
 1. Stock balances and cost layers are **never edited directly**. Only the stock
-   engine (`server/src/engine`) writes `stock_movements`, `cost_layers` and `stock_balances`.
+   engine (`backend/src/modules/inventory/engine`) writes `stock_movements`, `cost_layers` and `stock_balances`.
 2. Every stock posting runs inside a **MongoDB transaction** and is **idempotent**
    (`Idempotency-Key` header).
 3. Valuation is **FIFO**: inbound movements create layers; outbound movements consume the oldest
@@ -43,7 +43,7 @@ Work **one phase at a time**. Don't build features from later phases. Leave a
 ## Code conventions
 
 - TypeScript `strict`. No `any` without a comment explaining why.
-- Server module layout: `server/src/modules/<module>/{model,schema,service,controller,routes}.ts`.
+- Backend module layout: `backend/src/modules/<domain>/{model,schema,service,controller,routes}.ts`.
   Business logic lives in `service`. Controllers stay thin.
 - API: `/api/v1/...`; success `{ data, meta }`; error `{ error: { code, message, details } }`.
 - Document numbers come from the `counters` service (e.g. `GRN-2026-00042`).

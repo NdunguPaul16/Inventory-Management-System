@@ -26,7 +26,7 @@ in development: see step 2.
 ```bash
 npm install          # installs all workspaces; also downloads a test mongod binary (~100 MB, once)
 cp .env.example .env # optional; edit as needed
-npm run dev          # client on http://localhost:5173, API on http://localhost:4000/api/v1
+npm run dev          # frontend on http://localhost:5173, API on http://localhost:4000/api/v1
 ```
 
 1. **Open the app** at <http://localhost:5173>. The *System status* page (bottom of the
@@ -41,12 +41,12 @@ npm run dev          # client on http://localhost:5173, API on http://localhost:
 
 | Script | What it does |
 |---|---|
-| `npm run dev` | Builds `shared`, then runs `shared` (watch), `server` (tsx watch) and `client` (Vite) together |
-| `npm run build` | Production build of `shared`, `server` (`server/dist`) and `client` (`client/dist`) |
+| `npm run dev` | Builds `shared`, then runs `shared` (watch), `backend` (tsx watch) and `frontend` (Vite) together |
+| `npm run build` | Production build of `shared`, `backend` (`backend/dist`) and `frontend` (`frontend/dist`) |
 | `npm run lint` | ESLint across the repo (zero warnings allowed) |
 | `npm run format` / `format:check` | Prettier (Markdown docs are excluded) |
 | `npm run typecheck` | `tsc --noEmit` in every workspace |
-| `npm test` | Vitest in every workspace. Server tests use `mongodb-memory-server` in replica-set mode |
+| `npm test` | Vitest in every workspace. Backend tests use `mongodb-memory-server` in replica-set mode |
 
 A husky pre-commit hook runs lint-staged (ESLint + Prettier on staged files). CI
 (GitHub Actions) runs install → lint → format check → typecheck → test → build on every
@@ -55,8 +55,8 @@ push and pull request.
 ### Layout
 
 ```text
-client/   React + Vite + Tailwind + React Router + TanStack Query
-server/   Express + Mongoose API (src/config, middleware, modules/<module>, engine, integrations, jobs)
+frontend/ React + Vite + Tailwind + React Router + TanStack Query (src/modules/<domain>)
+backend/  Express + Mongoose API (src/modules/<domain>; inventory/engine owns the FIFO ledger)
 shared/   zod schemas and types used by both (@ims/shared)
 docs/     specification, phases, decisions
 ```
@@ -69,6 +69,7 @@ docs/     specification, phases, decisions
 | [Development phases](docs/02-development-phases.md) | Phase-by-phase build plan with tasks and acceptance criteria |
 | [Decisions log](docs/03-decisions-log.md) | Decided items and open questions with working assumptions |
 | [Claude Code prompts](docs/04-claude-code-prompts.md) | Ready-to-paste prompts for building each phase with Claude Code |
+| [Deployment setup](docs/deployment.md) | Vercel frontend and Render backend configuration and required environment variables |
 
 ## Status
 

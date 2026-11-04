@@ -75,21 +75,23 @@ eTIMS** for tax invoices.
 
 ```
 /
-├── client/                 React app (Vite + TS + Tailwind)
+├── frontend/               React app (Vite + TS + Tailwind)
 │   └── src/
 │       ├── app/            routing, layout, auth context
-│       ├── features/       one folder per module (items, purchasing, ...)
+│       ├── modules/        auth, dashboard, inventory, purchases, workshop,
+│       │                   sales, customers, suppliers, invoices, documents, reports
 │       ├── components/     shared UI (tables, forms, KPI cards)
-│       └── lib/            api client, formatters, hooks
-├── server/                 Express API
+│       └── lib/            HTTP client and formatters
+├── backend/                Express API
 │   └── src/
 │       ├── config/         env, db connection
 │       ├── middleware/     auth, rbac, validation, error handler
-│       ├── modules/        <module>/{model,service,controller,routes,schema}.ts
-│       ├── engine/         stock ledger + FIFO engine (pure, heavily tested)
-│       ├── integrations/   etims/, storage/, pdf/
+│       ├── modules/        auth, users, roles, inventory, purchases, imports,
+│       │                   workshop, sales, customers, suppliers, invoices,
+│       │                   documents, reports, integrations/etims
+│       │   └── inventory/  engine/ (FIFO ledger), items/, locations/
 │       └── jobs/           reconciliation, eTIMS retry queue, backups
-├── shared/                 shared TS types & zod schemas (client + server)
+├── shared/                 shared TS types & zod schemas (frontend + backend)
 └── docs/                   this documentation
 ```
 
@@ -180,7 +182,7 @@ server, never the client.
 
 ## 5. Stock engine (FIFO)
 
-The stock engine is a **pure service** (`server/src/engine`) that every module
+The stock engine is a **pure service** (`backend/src/modules/inventory/engine`) that every module
 calls. No module writes `stock_movements` or `cost_layers` directly.
 
 ### 5.1 Collections
@@ -414,7 +416,7 @@ eTIMS signing succeeds.
 
 ## 9. KRA eTIMS integration
 
-Built as an **adapter** in `server/src/integrations/etims`, behind an interface,
+Built as an **adapter** in `backend/src/modules/integrations/etims`, behind an interface,
 so the business modules never call KRA directly.
 
 ```ts

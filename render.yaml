@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: inventory-management-backend
+    runtime: node
+    autoDeployTrigger: off
+    buildCommand: npm ci && npm run build:shared && npm run build -w backend
+    startCommand: npm run start -w backend
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: AUTH_ACCESS_TOKEN_SECRET
+        sync: false
+      - key: AUTH_REFRESH_TOKEN_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

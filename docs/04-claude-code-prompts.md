@@ -16,20 +16,20 @@ docs/02-development-phases.md and docs/03-decisions-log.md.
 Then implement **Phase 0 — Project setup** exactly as listed in docs/02-development-phases.md:
 
 1. Create the branch `phase-0/setup` from `dfstock`.
-2. Set up an npm-workspaces monorepo with `client/`, `server/` and `shared/` (layout in spec §2.1).
-3. server: Express + TypeScript, pino logging, central error handler using the error envelope,
+2. Set up an npm-workspaces monorepo with `frontend/`, `backend/` and `shared/` (layout in spec §2.1).
+3. backend: Express + TypeScript, pino logging, central error handler using the error envelope,
    `GET /api/v1/health` that reports app and MongoDB status, env config validated with zod,
    MongoDB connection via Mongoose, and a `counters` service with an atomic `$inc`
    (format e.g. `GRN-2026-00042`) plus tests.
-4. client: Vite + React + TypeScript + Tailwind + React Router + TanStack Query, with a base layout
+4. frontend: Vite + React + TypeScript + Tailwind + React Router + TanStack Query, with a base layout
    (navy sidebar with menu placeholders for every module in spec §15, top bar, white content area)
    and a page that calls the health endpoint.
-5. shared: a package exporting zod and shared types, used by both client and server.
-6. Testing: Vitest on the client; Vitest/Jest + Supertest on the server, using
+5. shared: a package exporting zod and shared types, used by both frontend and backend.
+6. Testing: Vitest on the frontend; Vitest/Jest + Supertest on the backend, using
    mongodb-memory-server in **replica-set mode** (needed for transactions).
    Add one transaction smoke test.
 7. Tooling: strict tsconfig, ESLint + Prettier, husky + lint-staged. Root scripts:
-   `dev` (runs client and server together), `build`, `lint`, `typecheck`, `test`.
+   `dev` (runs frontend and backend together), `build`, `lint`, `typecheck`, `test`.
 8. GitHub Actions CI: install → lint → typecheck → test, on push and pull requests.
 9. `.env.example` and a README section on how to run the project locally.
 
@@ -69,7 +69,7 @@ Add this to the generic prompt when starting Phase 2:
 
 ```
 The FIFO stock engine is the most critical code in the system. Requirements:
-- A pure service in server/src/engine with postIn, postOut, transfer and reverse,
+- A pure service in backend/src/modules/inventory/engine with postIn, postOut, transfer and reverse,
   all inside Mongo transactions.
 - Lock the item+location balance document (findOneAndUpdate with a version bump)
   so concurrent OUT postings can never oversell.

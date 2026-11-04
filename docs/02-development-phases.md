@@ -30,34 +30,34 @@ Section references (§) point to [`01-project-specification.md`](./01-project-sp
 **Goal:** an empty but production-shaped codebase that anyone can clone and run.
 
 Tasks:
-- [x] Monorepo with npm workspaces: `client/`, `server/`, `shared/` (§2.1)
-- [x] `server`: Express + TS, `tsx`/`nodemon` dev, `pino` logging, error handler, `/api/v1/health`
-- [x] `client`: Vite + React + TS + Tailwind + React Router + TanStack Query; base layout (navy sidebar, top bar)
+- [x] Monorepo with npm workspaces: `frontend/`, `backend/`, `shared/` (§2.1)
+- [x] `backend`: Express + TS, `tsx`/`nodemon` dev, `pino` logging, error handler, `/api/v1/health`
+- [x] `frontend`: Vite + React + TS + Tailwind + React Router + TanStack Query; base layout (navy sidebar, top bar)
 - [x] `shared`: zod + shared types package
 - [x] MongoDB connection (Atlas M0 dev); `mongodb-memory-server` **replica set** for tests (transactions need one)
 - [x] ESLint, Prettier, `tsconfig` strict, husky + lint-staged
-- [x] Vitest (client), Jest/Vitest + Supertest (server)
+- [x] Vitest (frontend), Jest/Vitest + Supertest (backend)
 - [x] GitHub Actions CI: install → lint → type-check → test on every push / PR
 - [x] `.env.example`, `README` run instructions
 - [x] `counters` service for document numbering (atomic `$inc`)
 
 **Acceptance criteria:**
-- `npm install && npm run dev` starts the client and server; health check returns DB status.
+- `npm install && npm run dev` starts the frontend and backend; health check returns DB status.
 - CI is green on `dfstock`.
 
 **How they were met (2026-10-01):**
-- `npm run dev` builds `shared`, then runs `shared`, `server` and `client` together with
+- `npm run dev` builds `shared`, then runs `shared`, `backend` and `frontend` together with
   `concurrently`. Checked by hand: `GET http://localhost:5173/api/v1/health` (through the
   Vite proxy) returns `200` with `db: { status: "up", state: "connected", latencyMs }`.
   The *System status* page shows the result at desktop and phone width. With no
   `MONGODB_URI`, the dev server starts an in-memory replica set so a fresh clone runs
-  without any setup. `server/test/health.test.ts` covers the up case and the `503`
+  without any setup. `backend/test/health.test.ts` covers the up case and the `503`
   "degraded" case (DB disconnected).
 - `.github/workflows/ci.yml` runs install → lint → format check → typecheck → test → build
   on every push and PR. It passes locally (`npm run lint`, `npm run typecheck`, `npm test`,
   `npm run build`). It turns green on `dfstock` once the `phase-0/setup` PR is merged.
-- Replica-set transactions: `server/test/transaction.test.ts` (commit, abort/rollback,
-  isolation). Counters: `server/test/counters.test.ts` (format, per-year reset in
+- Replica-set transactions: `backend/test/transaction.test.ts` (commit, abort/rollback,
+  isolation). Counters: `backend/test/counters.test.ts` (format, per-year reset in
   Africa/Nairobi time, 50 parallel calls with no duplicates, rollback with the transaction).
 
 ---
@@ -103,7 +103,7 @@ recorded costs. Configurable approval thresholds, the CSV/Excel opening-stock wi
 count workflows, and the Phase 2 acceptance tests are still outstanding.
 
 Backend:
-- [ ] `engine/` service: `postIn`, `postOut`, `transfer`, `reverse`; all calls run inside Mongo transactions
+- [ ] `backend/src/modules/inventory/engine/` service: `postIn`, `postOut`, `transfer`, `reverse`; all calls run inside Mongo transactions
 - [ ] `stock_movements`, `cost_layers`, `stock_balances`, `serial_numbers` models + indexes
 - [ ] Negative-stock guard; idempotency keys on posting endpoints
 - [ ] **Opening stock** import (CSV/Excel → validated → posted as `OPENING` layers)
@@ -126,7 +126,7 @@ Frontend:
 - [ ] Reversal restores the exact prior state
 - [ ] Reconciliation finds no differences after a randomized sequence of postings
 
-**Acceptance criteria:** all engine tests pass with ≥ 90% coverage of `engine/`.
+**Acceptance criteria:** all engine tests pass with ≥ 90% coverage of `backend/src/modules/inventory/engine/`.
 
 ---
 
