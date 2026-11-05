@@ -220,6 +220,36 @@ describe('FIFO stock engine', () => {
     expect(await reconcileBalances()).toEqual({ checked: 2, differences: [] });
   });
 
+  it('conserves the recorded value of a fractional FIFO slice during transfer', async () => {
+    const receipt = await postIn(
+      input({ quantity: '0.5', movementType: 'OPENING', unitCost: 101 }),
+    );
+    expect(receipt.movements[0]?.totalCost).toBe(51);
+
+    const moved = await transfer({
+      itemId,
+      fromLocationId: sourceLocationId,
+      toLocationId: destinationLocationId,
+      quantity: '0.1',
+      sourceDoc: source('TRANSFER'),
+      postedBy: actorId,
+      idempotencyKey: key('fractional-transfer'),
+    });
+    expect(moved.movements.map((movement) => movement.totalCost)).toEqual([11, 11]);
+    const [sourceBalance, destinationBalance, destinationLayer] = await Promise.all([
+      StockBalance.findOne({ itemId, locationId: sourceLocationId }).lean(),
+      StockBalance.findOne({ itemId, locationId: destinationLocationId }).lean(),
+      CostLayer.findOne({ itemId, locationId: destinationLocationId }).lean(),
+    ]);
+    expect(amount(sourceBalance!.onHand)).toBe('0.4');
+    expect(sourceBalance!.value).toBe(40);
+    expect(amount(destinationBalance!.onHand)).toBe('0.1');
+    expect(destinationBalance!.value).toBe(11);
+    expect(destinationLayer!.remainingValue).toBe(11);
+    expect(sourceBalance!.value + destinationBalance!.value).toBe(51);
+    expect(await reconcileBalances()).toEqual({ checked: 2, differences: [] });
+  });
+
   it('reverses an outbound movement at its original FIFO cost and restores availability', async () => {
     await postIn(input({ quantity: '7', movementType: 'OPENING', unitCost: 12_300 }));
     const issued = await postOut(input({ quantity: '3', movementType: 'SALE' }));
@@ -245,6 +275,24 @@ describe('FIFO stock engine', () => {
         idempotencyKey: key('again'),
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
+  });
+
+  it('returns the recorded value of a fractional outbound slice during reversal', async () => {
+    await postIn(input({ quantity: '0.5', movementType: 'OPENING', unitCost: 101 }));
+    const issued = await postOut(input({ quantity: '0.1', movementType: 'SALE' }));
+    expect(issued.movements[0]?.totalCost).toBe(11);
+    const reversal = await reverse({
+      movementId: issued.movementIds[0]!,
+      postedBy: actorId,
+      idempotencyKey: key('fractional-reversal'),
+    });
+    expect(reversal.movements[0]?.totalCost).toBe(11);
+    const balance = await StockBalance.findOne({ itemId, locationId: sourceLocationId }).lean();
+    const layers = await CostLayer.find({ itemId, locationId: sourceLocationId }).lean();
+    expect(amount(balance!.onHand)).toBe('0.5');
+    expect(balance!.value).toBe(51);
+    expect(layers.reduce((sum, layer) => sum + layer.remainingValue!, 0)).toBe(51);
     expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
   });
 
