@@ -116,6 +116,96 @@ describe('authentication and roles', () => {
     expect(blocked.body.error.code).toBe('FORBIDDEN');
   });
 
+  it('creates and edits roles and users through the existing administration routes', async () => {
+    await createUser('Admin', 'admin@example.com');
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password })
+      .expect(200);
+    const authorization = `Bearer ${login.body.data.accessToken}`;
+
+    const role = await request(app)
+      .post('/api/v1/roles')
+      .set('Authorization', authorization)
+      .send({
+        name: 'Stock Reader',
+        description: 'Reads balances',
+        permissions: ['inventory.balances.read'],
+      })
+      .expect(201);
+    const roleId = role.body.data.id as string;
+    const created = await request(app)
+      .post('/api/v1/users')
+      .set('Authorization', authorization)
+      .send({ name: 'Amina Otieno', email: 'amina@example.com', password, roleIds: [roleId] })
+      .expect(201);
+    expect(created.body.data.roles[0].name).toBe('Stock Reader');
+    const userId = created.body.data.id as string;
+
+    const updated = await request(app)
+      .patch(`/api/v1/users/${userId}`)
+      .set('Authorization', authorization)
+      .send({
+        name: 'Amina O.',
+        isActive: false,
+        roleIds: [String((await Role.findOne({ name: 'Storekeeper' }))!._id)],
+      })
+      .expect(200);
+    expect(updated.body.data).toMatchObject({ name: 'Amina O.', isActive: false });
+    expect(updated.body.data.roles[0].name).toBe('Storekeeper');
+    await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'amina@example.com', password })
+      .expect(401);
+
+    const updatedRole = await request(app)
+      .patch(`/api/v1/roles/${roleId}`)
+      .set('Authorization', authorization)
+      .send({ permissions: ['inventory.balances.read', 'inventory.layers.read'] })
+      .expect(200);
+    expect(updatedRole.body.data.permissions).toEqual([
+      'inventory.balances.read',
+      'inventory.layers.read',
+    ]);
+
+    const systemRoleId = String((await Role.findOne({ name: 'Admin' }))!._id);
+    await request(app)
+      .patch(`/api/v1/roles/${systemRoleId}`)
+      .set('Authorization', authorization)
+      .send({ permissions: ['users.read'] })
+      .expect(400);
+    const description = await request(app)
+      .patch(`/api/v1/roles/${systemRoleId}`)
+      .set('Authorization', authorization)
+      .send({ description: 'Platform administrators' })
+      .expect(200);
+    expect(description.body.data.permissions).toEqual(['*']);
+  });
+
+  it('allows role viewing without granting permission to edit role permissions', async () => {
+    const [readerRole] = await Role.create([
+      { name: 'Role Reader', permissions: ['roles.read'], isSystem: false },
+    ]);
+    if (!readerRole) throw new Error('Role Reader was not created');
+    await User.create({
+      name: 'Role Reader',
+      email: 'reader@example.com',
+      passwordHash: await argon2.hash(password, PASSWORD_HASH_OPTIONS),
+      roleIds: [readerRole._id],
+    });
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'reader@example.com', password })
+      .expect(200);
+    const authorization = `Bearer ${login.body.data.accessToken}`;
+    await request(app).get('/api/v1/roles').set('Authorization', authorization).expect(200);
+    await request(app)
+      .patch(`/api/v1/roles/${readerRole._id}`)
+      .set('Authorization', authorization)
+      .send({ permissions: ['*'] })
+      .expect(403);
+  });
+
   it('blocks a Storekeeper from opening stock, reversals and approving or posting stock actions', async () => {
     const storekeeperRole = await Role.findOne({ name: 'Storekeeper' });
     const managerRole = await Role.findOne({ name: 'Owner / Manager' });

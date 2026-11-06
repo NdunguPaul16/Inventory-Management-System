@@ -220,7 +220,8 @@ export const NAV_SECTIONS: NavSection[] = [
         phase: 1,
         permission: 'settings.read',
       },
-      { label: 'Users & roles', path: '/settings/users', phase: 1, permission: 'users.read' },
+      { label: 'Users', path: '/settings/users', phase: 1, permission: 'users.read' },
+      { label: 'Roles', path: '/settings/roles', phase: 1, permission: 'roles.read' },
       {
         label: 'Approval thresholds',
         path: '/settings/approvals',

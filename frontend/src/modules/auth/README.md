@@ -15,5 +15,8 @@ Backend permission checks remain authoritative. `visibleNavigation` and `Permiss
 the same exact/wildcard matching rule as backend `hasPermission` to guide navigation. A new
 protected page should use its backend read permission for both its menu item and route gate.
 
-Phase 1 still needs the users and roles administration screens, settings, master data, and item
-screens. Those routes continue to show the existing placeholders until implemented.
+`reloadUser()` updates `/auth/me` after an administrator changes their own account or a role
+assigned to them, so menu permissions reflect the server's current role assignments.
+
+Phase 1 still needs settings, master data, and item screens. Those routes continue to show the
+existing placeholders until implemented.

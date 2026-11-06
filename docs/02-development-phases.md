@@ -77,7 +77,7 @@ Backend:
 
 Frontend:
 - [x] Login page, protected routes, permission-aware menu (Phase 1A on `refactor/frontend-backend-layout`; pending review and merge)
-- [ ] Users & roles admin, settings pages
+- [x] Users & roles admin (Phase 1B on `refactor/frontend-backend-layout`; pending review and merge); settings pages remain
 - [ ] Master data screens; items list (search, filters, pagination) and item form
 
 **Acceptance criteria:**

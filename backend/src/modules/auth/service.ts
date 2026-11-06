@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import * as jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import type { LoginInput } from '@ims/shared';
 import mongoose, { Types, type ClientSession } from 'mongoose';
 import { AppError } from '../../lib/errors.js';

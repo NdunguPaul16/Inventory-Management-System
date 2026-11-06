@@ -9,6 +9,7 @@ export interface AuthContextValue {
   user: AuthUser | null;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
+  reloadUser: () => Promise<void>;
   authorizedRequest: <T extends z.ZodType>(
     path: string,
     schema: T,

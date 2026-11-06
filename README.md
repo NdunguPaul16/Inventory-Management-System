@@ -77,10 +77,10 @@ docs/     specification, phases, decisions
 ## Status
 
 The Phase 0 scaffold is committed on `phase-0/setup` and has not yet been merged
-into `dfstock`. Phase 1A frontend login and protected navigation are implemented
-on the refactor branch pending review. Phase 1 administration and master data,
-the opening-stock import wizard, stock counts, and frontend inventory screens
-remain outstanding.
+into `dfstock`. Phase 1A frontend login and protected navigation, plus Phase 1B
+users and roles administration, are implemented on the refactor branch pending
+review. Settings and master data, the opening-stock import wizard, stock counts,
+and frontend inventory screens remain outstanding.
 
 ### Controlled stock changes
 
