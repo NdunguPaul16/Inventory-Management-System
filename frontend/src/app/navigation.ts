@@ -2,12 +2,12 @@
  * Sidebar menu for every module in spec §15. `phase` is the build phase that delivers
  * the page; until then the route shows a placeholder.
  *
- * TODO(phase-1): filter entries by the signed-in user's permissions.
  */
 export interface NavLinkItem {
   label: string;
   path: string;
   phase: number;
+  permission?: string;
 }
 
 export interface NavSection {
@@ -41,13 +41,43 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Inventory',
     icon: 'inventory',
     items: [
-      { label: 'Items', path: '/inventory/items', phase: 1 },
-      { label: 'Categories', path: '/inventory/categories', phase: 1 },
-      { label: 'Locations', path: '/inventory/locations', phase: 1 },
-      { label: 'Stock balances', path: '/inventory/balances', phase: 2 },
-      { label: 'Adjustments', path: '/inventory/adjustments', phase: 2 },
-      { label: 'Transfers', path: '/inventory/transfers', phase: 2 },
-      { label: 'Stock counts', path: '/inventory/counts', phase: 2 },
+      { label: 'Items', path: '/inventory/items', phase: 1, permission: 'inventory.items.read' },
+      {
+        label: 'Categories',
+        path: '/inventory/categories',
+        phase: 1,
+        permission: 'inventory.categories.read',
+      },
+      {
+        label: 'Locations',
+        path: '/inventory/locations',
+        phase: 1,
+        permission: 'inventory.locations.read',
+      },
+      {
+        label: 'Stock balances',
+        path: '/inventory/balances',
+        phase: 2,
+        permission: 'inventory.balances.read',
+      },
+      {
+        label: 'Adjustments',
+        path: '/inventory/adjustments',
+        phase: 2,
+        permission: 'inventory.adjustments.request',
+      },
+      {
+        label: 'Transfers',
+        path: '/inventory/transfers',
+        phase: 2,
+        permission: 'inventory.transfers.post',
+      },
+      {
+        label: 'Stock counts',
+        path: '/inventory/counts',
+        phase: 2,
+        permission: 'inventory.reconciliation.read',
+      },
     ],
   },
   {
@@ -55,13 +85,43 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Purchasing',
     icon: 'purchasing',
     items: [
-      { label: 'Suppliers', path: '/purchasing/suppliers', phase: 3 },
-      { label: 'Purchase orders', path: '/purchasing/orders', phase: 3 },
-      { label: 'Import shipments', path: '/purchasing/shipments', phase: 3 },
-      { label: 'Goods received', path: '/purchasing/grns', phase: 3 },
-      { label: 'Supplier invoices', path: '/purchasing/invoices', phase: 3 },
-      { label: 'Landed costs', path: '/purchasing/landed-costs', phase: 3 },
-      { label: 'Purchase returns', path: '/purchasing/returns', phase: 3 },
+      { label: 'Suppliers', path: '/purchasing/suppliers', phase: 3, permission: 'suppliers.read' },
+      {
+        label: 'Purchase orders',
+        path: '/purchasing/orders',
+        phase: 3,
+        permission: 'purchasing.read',
+      },
+      {
+        label: 'Import shipments',
+        path: '/purchasing/shipments',
+        phase: 3,
+        permission: 'purchasing.read',
+      },
+      {
+        label: 'Goods received',
+        path: '/purchasing/grns',
+        phase: 3,
+        permission: 'purchasing.read',
+      },
+      {
+        label: 'Supplier invoices',
+        path: '/purchasing/invoices',
+        phase: 3,
+        permission: 'purchasing.read',
+      },
+      {
+        label: 'Landed costs',
+        path: '/purchasing/landed-costs',
+        phase: 3,
+        permission: 'purchasing.read',
+      },
+      {
+        label: 'Purchase returns',
+        path: '/purchasing/returns',
+        phase: 3,
+        permission: 'purchasing.read',
+      },
     ],
   },
   {
@@ -69,10 +129,25 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Workshop',
     icon: 'workshop',
     items: [
-      { label: 'Bills of materials', path: '/workshop/boms', phase: 4 },
-      { label: 'Production orders', path: '/workshop/production-orders', phase: 4 },
-      { label: 'Material issue', path: '/workshop/issue', phase: 4 },
-      { label: 'Completion', path: '/workshop/completion', phase: 4 },
+      { label: 'Bills of materials', path: '/workshop/boms', phase: 4, permission: 'boms.read' },
+      {
+        label: 'Production orders',
+        path: '/workshop/production-orders',
+        phase: 4,
+        permission: 'production.read',
+      },
+      {
+        label: 'Material issue',
+        path: '/workshop/issue',
+        phase: 4,
+        permission: 'production.issue',
+      },
+      {
+        label: 'Completion',
+        path: '/workshop/completion',
+        phase: 4,
+        permission: 'production.complete',
+      },
     ],
   },
   {
@@ -80,14 +155,19 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Sales',
     icon: 'sales',
     items: [
-      { label: 'Customers', path: '/sales/customers', phase: 5 },
-      { label: 'Quotations', path: '/sales/quotations', phase: 5 },
-      { label: 'Sales orders', path: '/sales/orders', phase: 5 },
-      { label: 'Cash sale', path: '/sales/cash-sale', phase: 5 },
-      { label: 'Delivery notes', path: '/sales/deliveries', phase: 5 },
-      { label: 'Invoices', path: '/sales/invoices', phase: 5 },
-      { label: 'Credit notes', path: '/sales/credit-notes', phase: 5 },
-      { label: 'Price lists', path: '/sales/price-lists', phase: 5 },
+      { label: 'Customers', path: '/sales/customers', phase: 5, permission: 'customers.read' },
+      { label: 'Quotations', path: '/sales/quotations', phase: 5, permission: 'sales.read' },
+      { label: 'Sales orders', path: '/sales/orders', phase: 5, permission: 'sales.read' },
+      { label: 'Cash sale', path: '/sales/cash-sale', phase: 5, permission: 'sales.read' },
+      {
+        label: 'Delivery notes',
+        path: '/sales/deliveries',
+        phase: 5,
+        permission: 'deliveries.read',
+      },
+      { label: 'Invoices', path: '/sales/invoices', phase: 5, permission: 'sales.read' },
+      { label: 'Credit notes', path: '/sales/credit-notes', phase: 5, permission: 'sales.read' },
+      { label: 'Price lists', path: '/sales/price-lists', phase: 5, permission: 'sales.read' },
     ],
   },
   {
@@ -95,10 +175,15 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Finance',
     icon: 'finance',
     items: [
-      { label: 'Receipts', path: '/finance/receipts', phase: 7 },
-      { label: 'Supplier payments', path: '/finance/supplier-payments', phase: 7 },
-      { label: 'Statements', path: '/finance/statements', phase: 7 },
-      { label: 'Ageing', path: '/finance/ageing', phase: 7 },
+      { label: 'Receipts', path: '/finance/receipts', phase: 7, permission: 'finance.read' },
+      {
+        label: 'Supplier payments',
+        path: '/finance/supplier-payments',
+        phase: 7,
+        permission: 'finance.read',
+      },
+      { label: 'Statements', path: '/finance/statements', phase: 7, permission: 'finance.read' },
+      { label: 'Ageing', path: '/finance/ageing', phase: 7, permission: 'finance.read' },
     ],
   },
   {
@@ -106,12 +191,22 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Reports',
     icon: 'reports',
     items: [
-      { label: 'Valuation', path: '/reports/valuation', phase: 7 },
-      { label: 'Movements', path: '/reports/movements', phase: 7 },
-      { label: 'Sales', path: '/reports/sales', phase: 7 },
-      { label: 'Margins', path: '/reports/margins', phase: 7 },
-      { label: 'Production cost', path: '/reports/production-cost', phase: 4 },
-      { label: 'VAT', path: '/reports/vat', phase: 7 },
+      {
+        label: 'Valuation',
+        path: '/reports/valuation',
+        phase: 7,
+        permission: 'inventory.valuation.read',
+      },
+      { label: 'Movements', path: '/reports/movements', phase: 7, permission: 'reports.read' },
+      { label: 'Sales', path: '/reports/sales', phase: 7, permission: 'reports.read' },
+      { label: 'Margins', path: '/reports/margins', phase: 7, permission: 'reports.read' },
+      {
+        label: 'Production cost',
+        path: '/reports/production-cost',
+        phase: 4,
+        permission: 'reports.read',
+      },
+      { label: 'VAT', path: '/reports/vat', phase: 7, permission: 'reports.read' },
     ],
   },
   {
@@ -119,20 +214,30 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Settings',
     icon: 'settings',
     items: [
-      { label: 'Company profile', path: '/settings/company', phase: 1 },
-      { label: 'Users & roles', path: '/settings/users', phase: 1 },
-      { label: 'Approval thresholds', path: '/settings/approvals', phase: 1 },
-      { label: 'Numbering', path: '/settings/numbering', phase: 1 },
-      { label: 'Taxes', path: '/settings/taxes', phase: 1 },
-      { label: 'Currencies', path: '/settings/currencies', phase: 1 },
-      { label: 'eTIMS', path: '/settings/etims', phase: 6 },
+      {
+        label: 'Company profile',
+        path: '/settings/company',
+        phase: 1,
+        permission: 'settings.read',
+      },
+      { label: 'Users & roles', path: '/settings/users', phase: 1, permission: 'users.read' },
+      {
+        label: 'Approval thresholds',
+        path: '/settings/approvals',
+        phase: 1,
+        permission: 'settings.read',
+      },
+      { label: 'Numbering', path: '/settings/numbering', phase: 1, permission: 'settings.read' },
+      { label: 'Taxes', path: '/settings/taxes', phase: 1, permission: 'settings.read' },
+      { label: 'Currencies', path: '/settings/currencies', phase: 1, permission: 'settings.read' },
+      { label: 'eTIMS', path: '/settings/etims', phase: 6, permission: 'settings.read' },
     ],
   },
   {
     id: 'audit',
     label: 'Audit',
     icon: 'audit',
-    items: [{ label: 'Audit log', path: '/audit', phase: 1 }],
+    items: [{ label: 'Audit log', path: '/audit', phase: 1, permission: 'audit.read' }],
   },
 ];
 

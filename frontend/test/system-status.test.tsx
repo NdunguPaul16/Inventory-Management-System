@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { healthBody, mockFetch, renderRoute } from './utils';
 
 describe('SystemStatusPage', () => {
@@ -7,7 +7,7 @@ describe('SystemStatusPage', () => {
     const fetchMock = mockFetch(200, healthBody());
     renderRoute('/system/status');
 
-    expect(await screen.findByText('Operational')).toBeInTheDocument();
+    expect(await screen.findByText('Operational', {}, { timeout: 5_000 })).toBeInTheDocument();
     expect(screen.getByText('Up')).toBeInTheDocument();
     expect(screen.getByText('connected')).toBeInTheDocument();
     expect(screen.getByText('3 ms')).toBeInTheDocument();
@@ -25,19 +25,16 @@ describe('SystemStatusPage', () => {
     );
     renderRoute('/system/status');
 
-    expect(await screen.findByRole('heading', { level: 2, name: 'API' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'API' }, { timeout: 5_000 }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText('Degraded').length).toBeGreaterThan(0);
     expect(screen.getByText('Down')).toBeInTheDocument();
     expect(screen.getByText('disconnected')).toBeInTheDocument();
   });
 
   it('shows the API as unreachable when the request fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new TypeError('Failed to fetch');
-      }),
-    );
+    mockFetch(200, healthBody(), new TypeError('Failed to fetch'));
     renderRoute('/system/status');
 
     expect(await screen.findByText('Unreachable')).toBeInTheDocument();

@@ -3,7 +3,10 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Icon } from '../components/Icon';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHealth } from '../modules/dashboard/hooks/useHealth';
-import { NAV_SECTIONS, SYSTEM_STATUS_PATH } from './navigation';
+import { useAuth } from '../modules/auth/auth-context';
+import { ProfileMenu } from '../modules/auth/components/ProfileMenu';
+import { visibleNavigation } from '../modules/auth/permissions';
+import { NAV_SECTIONS, SYSTEM_STATUS_PATH, type NavSection } from './navigation';
 
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return `block rounded-md px-3 py-1.5 text-sm transition-colors ${
@@ -13,7 +16,7 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
   }`;
 }
 
-function Sidebar({ onNavigate }: { onNavigate: () => void }) {
+function Sidebar({ onNavigate, sections }: { onNavigate: () => void; sections: NavSection[] }) {
   return (
     <nav aria-label="Main" className="flex h-full flex-col">
       <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-navy-800 px-5">
@@ -28,7 +31,7 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-        {NAV_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <div key={section.id}>
             <h2 className="mb-1 flex items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wider text-navy-300">
               <Icon name={section.icon} className="size-4" />
@@ -77,6 +80,8 @@ function ApiStatusPill() {
 export function AppLayout() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
+  const sections = user ? visibleNavigation(NAV_SECTIONS, user) : [];
 
   useEffect(() => {
     if (!open) return;
@@ -101,7 +106,7 @@ export function AppLayout() {
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <Sidebar onNavigate={() => setOpen(false)} />
+        <Sidebar onNavigate={() => setOpen(false)} sections={sections} />
       </aside>
 
       <div className="lg:pl-64">
@@ -121,7 +126,7 @@ export function AppLayout() {
           </p>
           <div className="ml-auto flex items-center gap-3">
             <ApiStatusPill />
-            {/* TODO(phase-1): signed-in user menu with logout. */}
+            <ProfileMenu />
           </div>
         </header>
 

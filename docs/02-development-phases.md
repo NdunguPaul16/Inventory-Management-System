@@ -76,7 +76,7 @@ Backend:
 - [ ] Items CRUD with all fields in §4.2 (incl. item type, serial tracking, KRA codes as placeholders)
 
 Frontend:
-- [ ] Login page, protected routes, permission-aware menu
+- [x] Login page, protected routes, permission-aware menu (Phase 1A on `refactor/frontend-backend-layout`; pending review and merge)
 - [ ] Users & roles admin, settings pages
 - [ ] Master data screens; items list (search, filters, pagination) and item form
 

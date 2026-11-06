@@ -29,13 +29,16 @@ cp .env.example .env # optional; edit as needed
 npm run dev          # frontend on http://localhost:5173, API on http://localhost:4000/api/v1
 ```
 
-1. **Open the app** at <http://localhost:5173>. The *System status* page (bottom of the
-   sidebar) calls `GET /api/v1/health` and shows the API and MongoDB status.
+1. **Create a local administrator** by setting `BOOTSTRAP_ADMIN_EMAIL` and
+   `BOOTSTRAP_ADMIN_PASSWORD` in your untracked `.env` before the first startup. Remove those
+   entries after the account is created. Open <http://localhost:5173>, sign in, and use the
+   *System status* page at the bottom of the sidebar to view API and MongoDB status.
 2. **Database.** Set `MONGODB_URI` in `.env` to your Atlas M0 connection string. If you
    leave it empty, the dev server starts a throwaway **in-memory replica set** and
    warns you that data won't persist. It must be a replica set either way, because stock
    postings run inside transactions.
 3. The Vite dev server proxies `/api` to the API, so the browser only talks to one origin.
+   The frontend keeps access tokens in memory and uses the backend's HttpOnly refresh cookie.
 
 ### Scripts (repo root)
 
@@ -74,9 +77,10 @@ docs/     specification, phases, decisions
 ## Status
 
 The Phase 0 scaffold is committed on `phase-0/setup` and has not yet been merged
-into `dfstock`. Phase 1 authentication and roles, and the Phase 2 stock engine,
-are local work in progress. Master data, the opening-stock import wizard, stock
-counts and frontend inventory screens remain outstanding.
+into `dfstock`. Phase 1A frontend login and protected navigation are implemented
+on the refactor branch pending review. Phase 1 administration and master data,
+the opening-stock import wizard, stock counts, and frontend inventory screens
+remain outstanding.
 
 ### Controlled stock changes
 
