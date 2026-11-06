@@ -55,7 +55,7 @@ Tasks:
   "degraded" case (DB disconnected).
 - `.github/workflows/ci.yml` runs install → lint → format check → typecheck → test → build
   on every push and PR. It passes locally (`npm run lint`, `npm run typecheck`, `npm test`,
-  `npm run build`). It turns green on `dfstock` once the `phase-0/setup` PR is merged.
+  `npm run build`). Check the GitHub Actions result on `dfstock` after pushing.
 - Replica-set transactions: `backend/test/transaction.test.ts` (commit, abort/rollback,
   isolation). Counters: `backend/test/counters.test.ts` (format, per-year reset in
   Africa/Nairobi time, 50 parallel calls with no duplicates, rollback with the transaction).
@@ -76,8 +76,8 @@ Backend:
 - [ ] Items CRUD with all fields in §4.2 (incl. item type, serial tracking, KRA codes as placeholders)
 
 Frontend:
-- [x] Login page, protected routes, permission-aware menu (Phase 1A on `refactor/frontend-backend-layout`; pending review and merge)
-- [x] Users & roles admin (Phase 1B on `refactor/frontend-backend-layout`; pending review and merge); settings pages remain
+- [x] Login page, protected routes, permission-aware menu (Phase 1A on `dfstock`)
+- [x] Users & roles admin (Phase 1B on `dfstock`); settings pages remain
 - [ ] Master data screens; items list (search, filters, pagination) and item form
 
 **Acceptance criteria:**

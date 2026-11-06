@@ -6,7 +6,7 @@ if (!apiOrigin || !/^https:\/\/[^/]+$/.test(apiOrigin)) {
 
 export const config = {
   framework: 'vite',
-  installCommand: 'npm ci --prefix ..',
+  installCommand: 'npm ci --include=dev --prefix ..',
   buildCommand: 'npm run build:shared --prefix .. && npm run build',
   outputDirectory: 'dist',
   rewrites: [

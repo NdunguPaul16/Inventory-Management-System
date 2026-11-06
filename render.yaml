@@ -2,8 +2,9 @@ services:
   - type: web
     name: inventory-management-backend
     runtime: node
+    branch: dfstock
     autoDeployTrigger: off
-    buildCommand: npm ci && npm run build:shared && npm run build -w backend
+    buildCommand: npm ci --include=dev && npm run build:shared && npm run build -w backend
     startCommand: npm run start -w backend
     healthCheckPath: /api/v1/health
     envVars:
