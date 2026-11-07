@@ -8,8 +8,13 @@ import { StockAction } from '../src/modules/inventory/action-model.js';
 import { hasPermission } from '../src/middleware/require-permission.js';
 import { Role } from '../src/modules/roles/model.js';
 import { DEFAULT_ROLES, seedDefaultRoles } from '../src/modules/roles/service.js';
+import { BootstrapLock } from '../src/modules/users/bootstrap-lock-model.js';
 import { User } from '../src/modules/users/model.js';
-import { PASSWORD_HASH_OPTIONS, updateUser } from '../src/modules/users/service.js';
+import {
+  PASSWORD_HASH_OPTIONS,
+  bootstrapAdministrator,
+  updateUser,
+} from '../src/modules/users/service.js';
 import { createTestApp } from './helpers.js';
 
 const app = createTestApp();
@@ -19,6 +24,7 @@ beforeAll(async () => {
   await Promise.all([
     Role.createCollection(),
     User.createCollection(),
+    BootstrapLock.createCollection(),
     Session.createCollection(),
     StockAction.createCollection(),
   ]);
@@ -33,7 +39,9 @@ beforeAll(async () => {
 beforeEach(async () => {
   await Promise.all([
     Session.deleteMany({}),
+    AuditLog.deleteMany({}),
     User.deleteMany({}),
+    BootstrapLock.deleteMany({}),
     Role.deleteMany({}),
     StockAction.deleteMany({}),
   ]);
@@ -55,6 +63,81 @@ describe('authentication and roles', () => {
   it('seeds every documented default role', async () => {
     expect(await Role.countDocuments()).toBe(DEFAULT_ROLES.length);
     expect((await Role.findOne({ name: 'Admin' }).lean())?.permissions).toEqual(['*']);
+  });
+
+  it('creates the initial administrator with the Admin role and a bootstrap audit event', async () => {
+    expect(
+      await bootstrapAdministrator({
+        name: 'Amina Otieno',
+        email: 'AMINA@example.com',
+        password,
+      }),
+    ).toBe(true);
+
+    const user = await User.findOne({ email: 'amina@example.com' }).select('+passwordHash');
+    const administrator = await Role.findOne({ name: 'Admin' });
+    expect(user).toBeTruthy();
+    expect(user?.roleIds.map(String)).toEqual([String(administrator?._id)]);
+    expect(await argon2.verify(user!.passwordHash, password)).toBe(true);
+    const audit = await AuditLog.findOne({ action: 'user.bootstrap', entityId: String(user?._id) });
+    expect(audit).toMatchObject({
+      action: 'user.bootstrap',
+      metadata: { source: 'cli' },
+    });
+    expect(audit?.after).not.toHaveProperty('passwordHash');
+    expect(audit?.after).not.toHaveProperty('password');
+  });
+
+  it('does not create another administrator when bootstrap is repeated', async () => {
+    const input = { name: 'Amina Otieno', email: 'amina@example.com', password };
+    await expect(bootstrapAdministrator(input)).resolves.toBe(true);
+    await expect(bootstrapAdministrator(input)).resolves.toBe(false);
+    expect(await User.countDocuments()).toBe(1);
+  });
+
+  it('creates only one initial administrator during concurrent bootstrap attempts', async () => {
+    const results = await Promise.all([
+      bootstrapAdministrator({ name: 'Amina Otieno', email: 'amina@example.com', password }),
+      bootstrapAdministrator({ name: 'Brian Mwangi', email: 'brian@example.com', password }),
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await User.countDocuments()).toBe(1);
+    expect(await AuditLog.countDocuments({ action: 'user.bootstrap' })).toBe(1);
+  });
+
+  it('rejects invalid bootstrap credentials without creating a user', async () => {
+    await expect(
+      bootstrapAdministrator({ name: 'A', email: 'not-an-email', password: 'short' }),
+    ).rejects.toThrow();
+    expect(await User.countDocuments()).toBe(0);
+  });
+
+  it('refuses bootstrap if any unrelated user already exists', async () => {
+    const existing = await createUser('Storekeeper', 'storekeeper@example.com');
+    await expect(
+      bootstrapAdministrator({ name: 'Amina Otieno', email: 'amina@example.com', password }),
+    ).resolves.toBe(false);
+    expect(await User.countDocuments()).toBe(1);
+    expect((await User.findById(existing._id))?.roleIds.map(String)).toEqual(
+      existing.roleIds.map(String),
+    );
+    expect(await User.exists({ email: 'amina@example.com' })).toBeNull();
+  });
+
+  it('fails safely if the Admin role has not been initialized', async () => {
+    await Role.deleteOne({ name: 'Admin' });
+    await expect(
+      bootstrapAdministrator({ name: 'Amina Otieno', email: 'amina@example.com', password }),
+    ).rejects.toThrow('Default Admin role has not been seeded');
+    expect(await User.countDocuments()).toBe(0);
+  });
+
+  it('does not expose a public administrator bootstrap endpoint', async () => {
+    await request(app)
+      .post('/api/v1/auth/bootstrap')
+      .send({ name: 'Amina Otieno', email: 'amina@example.com', password })
+      .expect(404);
   });
 
   it('issues an access token and an httpOnly refresh cookie, then returns the signed-in user', async () => {

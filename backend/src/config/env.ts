@@ -29,8 +29,6 @@ export const envSchema = z
       .string()
       .min(32)
       .default('development-refresh-token-secret-change-before-production'),
-    BOOTSTRAP_ADMIN_EMAIL: optionalString.pipe(z.email().optional()),
-    BOOTSTRAP_ADMIN_PASSWORD: optionalString,
     /** Comma-separated list of origins allowed by CORS. */
     CORS_ORIGINS: z
       .string()
@@ -60,13 +58,6 @@ export const envSchema = z
         path: ['AUTH_ACCESS_TOKEN_SECRET'],
         message:
           'production requires unique AUTH_ACCESS_TOKEN_SECRET and AUTH_REFRESH_TOKEN_SECRET values',
-      });
-    }
-    if (Boolean(env.BOOTSTRAP_ADMIN_EMAIL) !== Boolean(env.BOOTSTRAP_ADMIN_PASSWORD)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['BOOTSTRAP_ADMIN_EMAIL'],
-        message: 'BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be supplied together',
       });
     }
   });

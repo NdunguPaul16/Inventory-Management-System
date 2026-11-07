@@ -1,9 +1,15 @@
 import * as argon2 from 'argon2';
-import type { CreateUserInput, UpdateUserInput } from '@ims/shared';
+import {
+  bootstrapAdminSchema,
+  type BootstrapAdminInput,
+  type CreateUserInput,
+  type UpdateUserInput,
+} from '@ims/shared';
 import mongoose, { Types, type ClientSession } from 'mongoose';
 import { AppError } from '../../lib/errors.js';
 import { writeAuditLog } from '../audit/service.js';
 import { Role, type RoleDoc } from '../roles/model.js';
+import { BootstrapLock } from './bootstrap-lock-model.js';
 import { User, type UserDoc } from './model.js';
 
 export const PASSWORD_HASH_OPTIONS = {
@@ -155,41 +161,63 @@ export async function updateUser(id: string, input: UpdateUserInput, actorId: st
   }
 }
 
-/** Creates the first administrator only when the configured email does not already exist. */
-export async function bootstrapAdministrator(email: string, password: string): Promise<boolean> {
-  const passwordHash = await hashPassword(password);
+/** Creates the initial administrator only when the users collection is empty. */
+export async function bootstrapAdministrator(input: BootstrapAdminInput): Promise<boolean> {
+  const credentials = bootstrapAdminSchema.parse(input);
+  const passwordHash = await hashPassword(credentials.password);
+  try {
+    await BootstrapLock.createCollection();
+  } catch (error) {
+    if (!isMongoErrorCode(error, 48)) throw error;
+  }
+
   const session = await mongoose.startSession();
   try {
-    return (
-      (await session.withTransaction(async () => {
-        const existing = await User.exists({ email }).session(session);
-        if (existing) return false;
-        const administrator = await Role.findOne({ name: 'Admin' }).session(session);
-        if (!administrator) throw new Error('Default Admin role has not been seeded');
-        const [user] = await User.create(
-          [
-            {
-              name: 'Administrator',
-              email,
-              passwordHash,
-              roleIds: [administrator._id],
-            },
-          ],
-          { session },
-        );
-        if (!user) throw new Error('Bootstrap administrator was not created');
-        await writeAuditLog({
-          action: 'user.bootstrap',
-          entityType: 'user',
-          entityId: user._id,
-          after: publicUser(user, [administrator]),
-          metadata: { source: 'startup' },
-          session,
-        });
-        return true;
-      })) ?? false
-    );
+    try {
+      return (
+        (await session.withTransaction(async () => {
+          const lockId = 'initial-administrator';
+          if (await BootstrapLock.exists({ _id: lockId }).session(session)) return false;
+          const existing = await User.exists({}).session(session);
+          if (existing) return false;
+          const administrator = await Role.findOne({ name: 'Admin' }).session(session);
+          if (!administrator) throw new Error('Default Admin role has not been seeded');
+          await BootstrapLock.create([{ _id: lockId, createdAt: new Date() }], { session });
+          const [user] = await User.create(
+            [
+              {
+                name: credentials.name,
+                email: credentials.email,
+                passwordHash,
+                roleIds: [administrator._id],
+              },
+            ],
+            { session },
+          );
+          if (!user) throw new Error('Bootstrap administrator was not created');
+          await writeAuditLog({
+            action: 'user.bootstrap',
+            entityType: 'user',
+            entityId: user._id,
+            after: publicUser(user, [administrator]),
+            metadata: { source: 'cli' },
+            session,
+          });
+          return true;
+        })) ?? false
+      );
+    } catch (error) {
+      if (!isMongoErrorCode(error, 11_000)) throw error;
+      const lock = await BootstrapLock.exists({ _id: 'initial-administrator' });
+      const user = await User.exists({});
+      if (lock || user) return false;
+      throw error;
+    }
   } finally {
     await session.endSession();
   }
+}
+
+function isMongoErrorCode(error: unknown, code: number): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
 }

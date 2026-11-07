@@ -29,14 +29,15 @@ cp .env.example .env # optional; edit as needed
 npm run dev          # frontend on http://localhost:5173, API on http://localhost:4000/api/v1
 ```
 
-1. **Create a local administrator** by setting `BOOTSTRAP_ADMIN_EMAIL` and
-   `BOOTSTRAP_ADMIN_PASSWORD` in your untracked `.env` before the first startup. Remove those
-   entries after the account is created. Open <http://localhost:5173>, sign in, and use the
-   *System status* page at the bottom of the sidebar to view API and MongoDB status.
-2. **Database.** Set `MONGODB_URI` in `.env` to your Atlas M0 connection string. If you
+1. **Database.** Set `MONGODB_URI` in `.env` to your Atlas M0 connection string. If you
    leave it empty, the dev server starts a throwaway **in-memory replica set** and
    warns you that data won't persist. It must be a replica set either way, because stock
    postings run inside transactions.
+2. **Create a local administrator** with `npm run build:shared`,
+   `npm run build -w backend`, then `npm run bootstrap:admin -w backend`. The CLI
+   prompts for the name and email and reads the password without echoing it. It refuses to
+   run if any users already exist. Open <http://localhost:5173>, sign in, and use the
+   *System status* page at the bottom of the sidebar to view API and MongoDB status.
 3. The Vite dev server proxies `/api` to the API, so the browser only talks to one origin.
    The frontend keeps access tokens in memory and uses the backend's HttpOnly refresh cookie.
 

@@ -40,6 +40,7 @@ export const createUserSchema = z.object({
     .min(1)
     .max(20),
 });
+export const bootstrapAdminSchema = createUserSchema.omit({ roleIds: true });
 
 export const updateUserSchema = z
   .object({
@@ -79,6 +80,7 @@ export const authUserResponseSchema = apiSuccessSchema(authUserSchema);
 export type AuthUser = z.infer<typeof authUserSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type BootstrapAdminInput = z.infer<typeof bootstrapAdminSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
