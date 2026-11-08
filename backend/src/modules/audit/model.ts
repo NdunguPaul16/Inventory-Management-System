@@ -27,5 +27,6 @@ const auditLogSchema = new Schema<AuditLogDoc>(
 );
 auditLogSchema.index({ entityType: 1, entityId: 1, at: -1 });
 auditLogSchema.index({ actorId: 1, at: -1 });
+auditLogSchema.index({ at: -1, _id: -1 });
 
 export const AuditLog = model<AuditLogDoc>('AuditLog', auditLogSchema);

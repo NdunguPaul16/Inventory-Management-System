@@ -11,6 +11,7 @@ import { inventoryRoutes } from './modules/inventory/routes.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { userRoutes } from './modules/users/routes.js';
 import { roleRoutes } from './modules/roles/routes.js';
+import { auditRoutes } from './modules/audit/routes.js';
 import { authenticate } from './middleware/authenticate.js';
 import type { AuthConfig } from './modules/auth/service.js';
 
@@ -55,6 +56,7 @@ export function createApp(options: AppOptions): Express {
   api.use('/auth', authRoutes(options.auth));
   api.use('/users', userRoutes);
   api.use('/roles', roleRoutes);
+  api.use('/audit-logs', auditRoutes);
   api.use('/inventory', inventoryRoutes);
   app.use('/api/v1', api);
 
