@@ -13,6 +13,57 @@ const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 15 * 60 * 1_000;
+const INVALID_LOGIN_MESSAGE = 'Invalid email or password';
+// No account uses this hash. It has the same Argon2 parameters as real user hashes.
+const DUMMY_PASSWORD_HASH =
+  '$argon2id$v=19$m=19456,t=2,p=1$VG9vrxtA/83AsXvXLMLl3Q$e2cfQ+CNQrR4aDuXrW/RKX4MH7UTtuh34UemqzbWG5E';
+
+type LoginFailureReason =
+  | 'unknown_account'
+  | 'inactive_account'
+  | 'locked_account'
+  | 'invalid_password'
+  | 'account_unavailable'
+  | 'credentials_changed';
+
+/** An unverified account is the target of an attempt, never its authenticated actor. */
+async function auditFailedLogin(
+  reason: LoginFailureReason,
+  accountId?: Types.ObjectId,
+  options?: { session?: ClientSession; failedLoginCount?: number; lockedUntil?: Date },
+): Promise<void> {
+  await writeAuditLog({
+    action: 'auth.login.failed',
+    entityType: accountId ? 'user' : 'authentication_attempt',
+    entityId: accountId ?? 'unidentified',
+    metadata: {
+      reason,
+      ...(options?.failedLoginCount !== undefined
+        ? { failedLoginCount: options.failedLoginCount }
+        : {}),
+      ...(options?.lockedUntil ? { lockedUntil: options.lockedUntil } : {}),
+    },
+    ...(options?.session ? { session: options.session } : {}),
+  });
+}
+
+async function rejectLogin(
+  reason: LoginFailureReason,
+  password: string,
+  accountId?: Types.ObjectId,
+): Promise<never> {
+  // Keep early rejection paths close to a normal password check and audit transaction.
+  await verifyPassword(DUMMY_PASSWORD_HASH, password);
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await auditFailedLogin(reason, accountId, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+  throw AppError.unauthenticated(INVALID_LOGIN_MESSAGE);
+}
 
 export interface AuthConfig {
   accessTokenSecret: string;
@@ -65,47 +116,50 @@ async function issueRefreshToken(
 
 export async function authenticateCredentials(input: LoginInput, config: AuthConfig) {
   const user = await User.findOne({ email: input.email }).select('+passwordHash');
-  if (!user || !user.isActive) throw AppError.unauthenticated('Invalid email or password');
+  // Audit persistence is required for login. A failed audit write denies the attempt;
+  // counter changes and their audit event commit together in the transaction below.
+  if (!user) {
+    return rejectLogin('unknown_account', input.password);
+  }
+  if (!user.isActive) {
+    return rejectLogin('inactive_account', input.password, user._id);
+  }
   const now = new Date();
   if (user.lockedUntil && user.lockedUntil > now) {
-    throw AppError.unauthenticated('Too many failed login attempts; try again later');
+    return rejectLogin('locked_account', input.password, user._id);
   }
   const valid = await verifyPassword(user.passwordHash, input.password);
   const session = await mongoose.startSession();
   try {
-    if (!valid) {
-      await session.withTransaction(async () => {
-        const current = await User.findById(user._id).select('+passwordHash').session(session);
-        if (!current || !current.isActive || current.passwordHash !== user.passwordHash) return;
-        if (current.lockedUntil && current.lockedUntil > new Date()) return;
+    const result = await session.withTransaction(async () => {
+      const current = await User.findById(user._id).select('+passwordHash').session(session);
+      if (!current) {
+        await auditFailedLogin('account_unavailable', user._id, { session });
+        return false as const;
+      }
+      if (!current.isActive) {
+        await auditFailedLogin('inactive_account', current._id, { session });
+        return false as const;
+      }
+      if (current.passwordHash !== user.passwordHash) {
+        await auditFailedLogin('credentials_changed', current._id, { session });
+        return false as const;
+      }
+      if (current.lockedUntil && current.lockedUntil > new Date()) {
+        await auditFailedLogin('locked_account', current._id, { session });
+        return false as const;
+      }
+      if (!valid) {
         current.failedLoginCount += 1;
         if (current.failedLoginCount >= MAX_FAILED_LOGINS)
           current.lockedUntil = new Date(Date.now() + LOCKOUT_MS);
         await current.save({ session });
-        await writeAuditLog({
-          actorId: current._id,
-          action: 'auth.login.failed',
-          entityType: 'user',
-          entityId: current._id,
-          metadata: {
-            failedLoginCount: current.failedLoginCount,
-            lockedUntil: current.lockedUntil,
-          },
+        await auditFailedLogin('invalid_password', current._id, {
           session,
+          failedLoginCount: current.failedLoginCount,
+          ...(current.lockedUntil ? { lockedUntil: current.lockedUntil } : {}),
         });
-      });
-      throw AppError.unauthenticated('Invalid email or password');
-    }
-
-    const result = await session.withTransaction(async () => {
-      const current = await User.findById(user._id).select('+passwordHash').session(session);
-      if (
-        !current ||
-        !current.isActive ||
-        current.passwordHash !== user.passwordHash ||
-        (current.lockedUntil && current.lockedUntil > new Date())
-      ) {
-        throw AppError.unauthenticated('Invalid email or password');
+        return false as const;
       }
       current.failedLoginCount = 0;
       current.lockedUntil = undefined;
@@ -127,7 +181,8 @@ export async function authenticateCredentials(input: LoginInput, config: AuthCon
         refreshToken: refresh.token,
       };
     });
-    if (!result) throw new Error('Login transaction completed without a result');
+    if (result === undefined) throw new Error('Login transaction completed without a result');
+    if (result === false) throw AppError.unauthenticated(INVALID_LOGIN_MESSAGE);
     return result;
   } finally {
     await session.endSession();

@@ -19,6 +19,16 @@ import {
 import { createTestApp, silentLogger } from './helpers.js';
 
 const app = createTestApp();
+const productionApp = createApp({
+  logger: silentLogger,
+  environment: 'production',
+  corsOrigins: ['https://inventory.example.com'],
+  auth: {
+    accessTokenSecret: 'test-access-token-secret-that-is-at-least-32-characters',
+    refreshTokenSecret: 'test-refresh-token-secret-that-is-at-least-32-characters',
+    secureCookies: true,
+  },
+});
 const password = 'Correct horse battery staple 2026';
 
 beforeAll(async () => {
@@ -161,8 +171,11 @@ describe('authentication and roles', () => {
     expect(me.body.data).toMatchObject({ email: 'admin@example.com', permissions: ['*'] });
   });
 
-  it('rejects unknown accounts and wrong passwords without issuing a session', async () => {
-    await createUser('Admin', 'admin@example.com');
+  it('returns the same login error and safe audit events for wrong, unknown and inactive accounts', async () => {
+    const administrator = await createUser('Admin', 'admin@example.com');
+    const inactiveUser = await createUser('Storekeeper', 'inactive@example.com');
+    inactiveUser.isActive = false;
+    await inactiveUser.save();
     const wrongPassword = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: 'admin@example.com', password: 'wrong-password' })
@@ -171,13 +184,131 @@ describe('authentication and roles', () => {
       .post('/api/v1/auth/login')
       .send({ email: 'unknown@example.com', password: 'wrong-password' })
       .expect(401);
+    const inactiveAccount = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'inactive@example.com', password })
+      .expect(401);
 
     expect(wrongPassword.body).toEqual(unknownAccount.body);
+    expect(inactiveAccount.body).toEqual(wrongPassword.body);
     expect(wrongPassword.body.error).toMatchObject({ code: 'UNAUTHENTICATED' });
     expect(wrongPassword.headers['set-cookie']).toBeUndefined();
     expect(unknownAccount.headers['set-cookie']).toBeUndefined();
+    expect(inactiveAccount.headers['set-cookie']).toBeUndefined();
     expect(await Session.countDocuments()).toBe(0);
-    expect(await AuditLog.countDocuments({ action: 'auth.login.failed' })).toBe(1);
+    const failures = await AuditLog.find({ action: 'auth.login.failed' }).lean();
+    expect(failures).toHaveLength(3);
+    expect(failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entityType: 'user',
+          entityId: String(administrator._id),
+          metadata: expect.objectContaining({ reason: 'invalid_password', failedLoginCount: 1 }),
+        }),
+        expect.objectContaining({
+          entityType: 'authentication_attempt',
+          entityId: 'unidentified',
+          metadata: { reason: 'unknown_account' },
+        }),
+        expect.objectContaining({
+          entityType: 'user',
+          entityId: String(inactiveUser._id),
+          metadata: { reason: 'inactive_account' },
+        }),
+      ]),
+    );
+    expect(failures.every((failure) => failure.actorId === undefined)).toBe(true);
+    const auditText = JSON.stringify(failures);
+    for (const sensitiveValue of [
+      'admin@example.com',
+      'unknown@example.com',
+      'inactive@example.com',
+      'wrong-password',
+      password,
+    ]) {
+      expect(auditText).not.toContain(sensitiveValue);
+    }
+  });
+
+  it.each(['unknown', 'inactive', 'locked'] as const)(
+    'denies %s account login if its audit event cannot be saved',
+    async (accountState) => {
+      let email = 'unknown@example.com';
+      if (accountState !== 'unknown') {
+        const user = await createUser('Storekeeper', `${accountState}@example.com`);
+        email = user.email;
+        if (accountState === 'inactive') user.isActive = false;
+        else user.lockedUntil = new Date(Date.now() + 60_000);
+        await user.save();
+      }
+      const auditCount = await AuditLog.countDocuments();
+      const auditFailure = vi
+        .spyOn(AuditLog, 'create')
+        .mockRejectedValueOnce(new Error('simulated audit write failure'));
+      try {
+        const denied = await request(productionApp)
+          .post('/api/v1/auth/login')
+          .send({ email, password })
+          .expect(500);
+        expect(denied.body).toEqual({
+          error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+        });
+        expect(denied.headers['set-cookie']).toBeUndefined();
+        expect(denied.body).not.toHaveProperty('data.accessToken');
+      } finally {
+        auditFailure.mockRestore();
+      }
+      expect(await AuditLog.countDocuments()).toBe(auditCount);
+      expect(await Session.countDocuments()).toBe(0);
+    },
+  );
+
+  it('rolls back the failed-login counter if its audit event cannot be saved', async () => {
+    const user = await createUser('Admin', 'admin@example.com');
+    const auditFailure = vi
+      .spyOn(AuditLog, 'create')
+      .mockRejectedValueOnce(new Error('simulated audit write failure'));
+    try {
+      const denied = await request(productionApp)
+        .post('/api/v1/auth/login')
+        .send({ email: user.email, password: 'wrong-password' })
+        .expect(500);
+      expect(denied.body).toEqual({
+        error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+      });
+      expect(denied.headers['set-cookie']).toBeUndefined();
+    } finally {
+      auditFailure.mockRestore();
+    }
+    expect((await User.findById(user._id))?.failedLoginCount).toBe(0);
+    expect(await Session.countDocuments()).toBe(0);
+    await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: user.email, password: 'wrong-password' })
+      .expect(401);
+    expect((await User.findById(user._id))?.failedLoginCount).toBe(1);
+  });
+
+  it('does not issue a session if a successful-login audit event cannot be saved', async () => {
+    const user = await createUser('Admin', 'admin@example.com');
+    const auditFailure = vi
+      .spyOn(AuditLog, 'create')
+      .mockRejectedValueOnce(new Error('simulated audit write failure'));
+    try {
+      const denied = await request(productionApp)
+        .post('/api/v1/auth/login')
+        .send({ email: user.email, password })
+        .expect(500);
+      expect(denied.body).toEqual({
+        error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
+      });
+      expect(denied.headers['set-cookie']).toBeUndefined();
+      expect(denied.body).not.toHaveProperty('data.accessToken');
+    } finally {
+      auditFailure.mockRestore();
+    }
+    expect(await Session.countDocuments()).toBe(0);
+    expect((await User.findById(user._id))?.lastLoginAt).toBeUndefined();
   });
 
   it('rotates refresh sessions and rejects the used refresh token', async () => {
@@ -200,16 +331,6 @@ describe('authentication and roles', () => {
 
   it('protects the production refresh cookie and revokes it on logout', async () => {
     const user = await createUser('Admin', 'admin@example.com');
-    const productionApp = createApp({
-      logger: silentLogger,
-      environment: 'production',
-      corsOrigins: ['https://inventory.example.com'],
-      auth: {
-        accessTokenSecret: 'test-access-token-secret-that-is-at-least-32-characters',
-        refreshTokenSecret: 'test-refresh-token-secret-that-is-at-least-32-characters',
-        secureCookies: true,
-      },
-    });
     const login = await request(productionApp)
       .post('/api/v1/auth/login')
       .send({ email: 'admin@example.com', password })
@@ -600,16 +721,36 @@ describe('authentication and roles', () => {
   });
 
   it('locks an account after repeated failed password attempts', async () => {
-    await createUser('Admin', 'admin@example.com');
+    const user = await createUser('Admin', 'admin@example.com');
+    let invalidResponse: unknown;
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      await request(app)
+      const denied = await request(app)
         .post('/api/v1/auth/login')
         .send({ email: 'admin@example.com', password: 'wrong-password' })
         .expect(401);
+      invalidResponse = denied.body;
     }
-    await request(app)
+    const locked = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: 'admin@example.com', password })
       .expect(401);
+    expect(locked.body).toEqual(invalidResponse);
+    expect(locked.headers['set-cookie']).toBeUndefined();
+    expect(await Session.countDocuments()).toBe(0);
+    const lockedUser = await User.findById(user._id);
+    expect(lockedUser?.failedLoginCount).toBe(5);
+    expect(lockedUser?.lockedUntil?.getTime()).toBeGreaterThan(Date.now());
+    expect(await AuditLog.countDocuments({ 'metadata.reason': 'invalid_password' })).toBe(5);
+    expect(await AuditLog.countDocuments({ 'metadata.reason': 'locked_account' })).toBe(1);
+
+    lockedUser!.lockedUntil = new Date(Date.now() - 1_000);
+    await lockedUser!.save();
+    await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password })
+      .expect(200);
+    const unlockedUser = await User.findById(user._id);
+    expect(unlockedUser?.failedLoginCount).toBe(0);
+    expect(unlockedUser?.lockedUntil).toBeUndefined();
   });
 });

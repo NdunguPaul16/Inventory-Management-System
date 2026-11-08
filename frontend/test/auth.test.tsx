@@ -101,12 +101,14 @@ describe('frontend authentication', () => {
     expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
   });
 
-  it('shows the backend lockout message', async () => {
-    anonymousFetch(401, 'Too many failed login attempts; try again later');
+  it('shows the generic login error without revealing account lockout status', async () => {
+    anonymousFetch(401, 'Invalid email or password');
     renderRoute('/login');
     await screen.findByRole('heading', { name: 'Sign in to your account' });
     await fillLogin();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Too many failed login attempts');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Invalid email or password');
+    expect(alert).not.toHaveTextContent(/locked|failed attempts/i);
   });
 
   it('restores a refresh-cookie session and logs out through the backend', async () => {
