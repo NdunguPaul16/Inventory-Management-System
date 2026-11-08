@@ -1,7 +1,8 @@
 # Audit history: proposed read module
 
-**Status:** Design for a later, separately approved implementation. No audit-history API or
-screen is included in the authentication-security commits.
+**Status:** Implemented locally on `feature/audit-history`, based on the authentication-security
+commits. This implementation has not been pushed, merged, or deployed. The design below remains
+the contract; production query plans and rate limits need review before release.
 
 ## Existing foundation
 

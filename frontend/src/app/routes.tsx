@@ -6,6 +6,7 @@ import { ProtectedRoute } from '../modules/auth/components/ProtectedRoute';
 import { PermissionGate } from '../modules/auth/components/PermissionGate';
 import { UsersPage } from '../modules/users/pages/UsersPage';
 import { RolesPage } from '../modules/roles/pages/RolesPage';
+import { AuditHistoryPage } from '../modules/audit/pages/AuditHistoryPage';
 import { AppLayout } from './AppLayout';
 import { PLACEHOLDER_ROUTES, SYSTEM_STATUS_PATH } from './navigation';
 
@@ -28,6 +29,14 @@ export const routes: RouteObject[] = [
             ),
           },
           {
+            path: '/audit',
+            element: (
+              <PermissionGate permission="audit.read">
+                <AuditHistoryPage />
+              </PermissionGate>
+            ),
+          },
+          {
             path: '/settings/roles',
             element: (
               <PermissionGate permission="roles.read">
@@ -37,7 +46,7 @@ export const routes: RouteObject[] = [
           },
           // Each later phase swaps its placeholders for real pages.
           ...PLACEHOLDER_ROUTES.filter(
-            ({ path }) => !['/settings/users', '/settings/roles'].includes(path),
+            ({ path }) => !['/settings/users', '/settings/roles', '/audit'].includes(path),
           ).map(({ path, label, phase, permission }) => ({
             path,
             element: (
