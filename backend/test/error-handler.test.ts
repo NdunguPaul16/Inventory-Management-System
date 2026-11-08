@@ -28,7 +28,10 @@ function buildApp(exposeInternalErrors = false) {
     throw AppError.conflict('Already posted', { docNumber: 'GRN-2026-00001' });
   });
   app.get('/duplicate', () => {
-    throw Object.assign(new Error('E11000 duplicate key'), { code: 11000, keyValue: { sku: 'A' } });
+    throw Object.assign(new Error('E11000 duplicate key'), {
+      code: 11000,
+      keyValue: { email: 'private@example.com' },
+    });
   });
   app.get('/boom', async () => {
     await Promise.resolve();
@@ -76,9 +79,12 @@ describe('validate middleware + error handler', () => {
     });
   });
 
-  it('maps Mongo duplicate keys to CONFLICT', async () => {
+  it('maps Mongo duplicate keys to CONFLICT without exposing the duplicate value', async () => {
     const res = await request(app).get('/duplicate').expect(409);
-    expect(res.body.error).toMatchObject({ code: 'CONFLICT', details: { sku: 'A' } });
+    expect(res.body).toEqual({ error: { code: 'CONFLICT', message: 'Duplicate value' } });
+
+    const shown = await request(buildApp(true)).get('/duplicate').expect(409);
+    expect(shown.body.error.details).toEqual({ email: 'private@example.com' });
   });
 
   it('hides internal error messages unless exposure is enabled', async () => {

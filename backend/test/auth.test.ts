@@ -2,6 +2,7 @@ import * as argon2 from 'argon2';
 import { Types } from 'mongoose';
 import request from 'supertest';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp } from '../src/app.js';
 import { AuditLog } from '../src/modules/audit/model.js';
 import { Session } from '../src/modules/auth/model.js';
 import { StockAction } from '../src/modules/inventory/action-model.js';
@@ -15,7 +16,7 @@ import {
   bootstrapAdministrator,
   updateUser,
 } from '../src/modules/users/service.js';
-import { createTestApp } from './helpers.js';
+import { createTestApp, silentLogger } from './helpers.js';
 
 const app = createTestApp();
 const password = 'Correct horse battery staple 2026';
@@ -160,6 +161,25 @@ describe('authentication and roles', () => {
     expect(me.body.data).toMatchObject({ email: 'admin@example.com', permissions: ['*'] });
   });
 
+  it('rejects unknown accounts and wrong passwords without issuing a session', async () => {
+    await createUser('Admin', 'admin@example.com');
+    const wrongPassword = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password: 'wrong-password' })
+      .expect(401);
+    const unknownAccount = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'unknown@example.com', password: 'wrong-password' })
+      .expect(401);
+
+    expect(wrongPassword.body).toEqual(unknownAccount.body);
+    expect(wrongPassword.body.error).toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(wrongPassword.headers['set-cookie']).toBeUndefined();
+    expect(unknownAccount.headers['set-cookie']).toBeUndefined();
+    expect(await Session.countDocuments()).toBe(0);
+    expect(await AuditLog.countDocuments({ action: 'auth.login.failed' })).toBe(1);
+  });
+
   it('rotates refresh sessions and rejects the used refresh token', async () => {
     await createUser('Admin', 'admin@example.com');
     const agent = request.agent(app);
@@ -176,6 +196,72 @@ describe('authentication and roles', () => {
 
     await request(app).post('/api/v1/auth/refresh').set('Cookie', initialCookie!).expect(401);
     await request(app).post('/api/v1/auth/refresh').set('Cookie', nextCookie!).expect(200);
+  });
+
+  it('protects the production refresh cookie and revokes it on logout', async () => {
+    const user = await createUser('Admin', 'admin@example.com');
+    const productionApp = createApp({
+      logger: silentLogger,
+      environment: 'production',
+      corsOrigins: ['https://inventory.example.com'],
+      auth: {
+        accessTokenSecret: 'test-access-token-secret-that-is-at-least-32-characters',
+        refreshTokenSecret: 'test-refresh-token-secret-that-is-at-least-32-characters',
+        secureCookies: true,
+      },
+    });
+    const login = await request(productionApp)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password })
+      .expect(200);
+    const cookie = login.headers['set-cookie']?.[0] as string | undefined;
+    expect(cookie).toMatch(/^ims_refresh=.*; HttpOnly; Secure; SameSite=Lax/i);
+    expect(cookie).toContain('Path=/api/v1/auth');
+    expect(login.body.data).not.toHaveProperty('refreshToken');
+
+    const refreshToken = cookie?.split(';')[0]?.split('=')[1];
+    expect(refreshToken).toBeTruthy();
+    const stored = await Session.findOne({ userId: user._id }).select('+tokenHash');
+    expect(stored?.tokenHash).toMatch(/^[a-f\d]{64}$/);
+    expect(stored?.tokenHash).not.toBe(refreshToken);
+
+    await request(productionApp).post('/api/v1/auth/refresh').expect(401);
+    await request(productionApp)
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${refreshToken}`)
+      .expect(401);
+    await request(productionApp).post('/api/v1/auth/logout').set('Cookie', cookie!).expect(204);
+    await request(productionApp).post('/api/v1/auth/refresh').set('Cookie', cookie!).expect(401);
+    expect(await AuditLog.countDocuments({ action: 'auth.logout', actorId: user._id })).toBe(1);
+  });
+
+  it('rejects access and refresh for a user after an administrator deactivates the account', async () => {
+    await createUser('Admin', 'admin@example.com');
+    const storekeeper = await createUser('Storekeeper', 'storekeeper@example.com');
+    const adminLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password })
+      .expect(200);
+    const storekeeperLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'storekeeper@example.com', password })
+      .expect(200);
+    const storekeeperCookie = storekeeperLogin.headers['set-cookie']?.[0] as string;
+
+    await request(app)
+      .patch(`/api/v1/users/${storekeeper._id}`)
+      .set('Authorization', `Bearer ${adminLogin.body.data.accessToken}`)
+      .send({ isActive: false })
+      .expect(200);
+    await request(app)
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${storekeeperLogin.body.data.accessToken}`)
+      .expect(401);
+    await request(app).post('/api/v1/auth/refresh').set('Cookie', storekeeperCookie).expect(401);
+    await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'storekeeper@example.com', password })
+      .expect(401);
   });
 
   it('enforces role permissions on users endpoints', async () => {
@@ -289,6 +375,83 @@ describe('authentication and roles', () => {
       .expect(403);
   });
 
+  it('lets an administrator edit and approve while a Storekeeper cannot change an Admin role or approve stock', async () => {
+    const administrator = await createUser('Admin', 'admin@example.com');
+    const storekeeper = await createUser('Storekeeper', 'storekeeper@example.com');
+    const adminRole = await Role.findOne({ name: 'Admin' });
+    const storekeeperRole = await Role.findOne({ name: 'Storekeeper' });
+    if (!adminRole || !storekeeperRole) throw new Error('Default roles were not seeded');
+    const adminLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password })
+      .expect(200);
+    const storekeeperLogin = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'storekeeper@example.com', password })
+      .expect(200);
+    const adminAuthorization = `Bearer ${adminLogin.body.data.accessToken}`;
+    const storekeeperAuthorization = `Bearer ${storekeeperLogin.body.data.accessToken}`;
+    const action = await StockAction.create({
+      actionNo: 'TEST-ADMIN-APPROVAL',
+      actionType: 'OPENING',
+      payload: {
+        itemId: String(new Types.ObjectId()),
+        locationId: String(new Types.ObjectId()),
+        quantity: '1',
+        unitCost: '1',
+      },
+      requestedBy: storekeeper._id,
+    });
+
+    await request(app)
+      .patch(`/api/v1/roles/${adminRole._id}`)
+      .set('Authorization', storekeeperAuthorization)
+      .send({ description: 'Escalated by Storekeeper' })
+      .expect(403);
+    await request(app)
+      .patch(`/api/v1/users/${administrator._id}`)
+      .set('Authorization', storekeeperAuthorization)
+      .send({ roleIds: [storekeeperRole._id] })
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/inventory/requests/${action._id}/approve`)
+      .set('Authorization', storekeeperAuthorization)
+      .expect(403);
+    expect((await Role.findById(adminRole._id))?.description).toBe(adminRole.description);
+    expect((await User.findById(administrator._id))?.roleIds.map(String)).toEqual(
+      administrator.roleIds.map(String),
+    );
+    expect((await StockAction.findById(action._id))?.status).toBe('PENDING_APPROVAL');
+    expect(await AuditLog.countDocuments({ action: 'role.update' })).toBe(0);
+    expect(await AuditLog.countDocuments({ action: 'stock.action.approve' })).toBe(0);
+
+    await request(app)
+      .patch(`/api/v1/roles/${adminRole._id}`)
+      .set('Authorization', adminAuthorization)
+      .send({ description: 'Platform administrators' })
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/inventory/requests/${action._id}/approve`)
+      .set('Authorization', adminAuthorization)
+      .expect(200);
+    const roleAudit = await AuditLog.findOne({
+      action: 'role.update',
+      entityId: String(adminRole._id),
+    });
+    expect(roleAudit).toMatchObject({
+      actorId: administrator._id,
+      before: { description: adminRole.description, permissions: ['*'] },
+      after: { description: 'Platform administrators', permissions: ['*'] },
+    });
+    const approvalAudit = await AuditLog.findOne({
+      action: 'stock.action.approve',
+      entityId: String(action._id),
+    });
+    expect(approvalAudit).toMatchObject({ actorId: administrator._id });
+    expect(approvalAudit?.before).toMatchObject({ status: 'PENDING_APPROVAL' });
+    expect(approvalAudit?.after).toMatchObject({ status: 'APPROVED' });
+  });
+
   it('blocks a Storekeeper from opening stock, reversals and approving or posting stock actions', async () => {
     const storekeeperRole = await Role.findOne({ name: 'Storekeeper' });
     const managerRole = await Role.findOne({ name: 'Owner / Manager' });
@@ -364,6 +527,76 @@ describe('authentication and roles', () => {
     expect(unchanged?.name).toBe(user.name);
     expect(unchanged?.passwordHash).toBe(originalHash);
     expect(await AuditLog.countDocuments()).toBe(auditCount);
+  });
+
+  it('audits password changes without storing the password or hash', async () => {
+    const administrator = await createUser('Admin', 'admin@example.com');
+    const storekeeper = await createUser('Storekeeper', 'storekeeper@example.com');
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password })
+      .expect(200);
+    const nextPassword = 'A different secure password 2026';
+    await request(app)
+      .patch(`/api/v1/users/${storekeeper._id}`)
+      .set('Authorization', `Bearer ${login.body.data.accessToken}`)
+      .send({ password: nextPassword })
+      .expect(200);
+
+    const audit = await AuditLog.findOne({
+      action: 'user.update',
+      entityId: String(storekeeper._id),
+    });
+    expect(audit).toMatchObject({
+      actorId: administrator._id,
+      metadata: { passwordChanged: true },
+    });
+    const auditText = JSON.stringify(audit?.toObject());
+    expect(auditText).not.toContain(password);
+    expect(auditText).not.toContain(nextPassword);
+    expect(auditText).not.toContain('passwordHash');
+    const stored = await User.findById(storekeeper._id).select('+passwordHash');
+    expect(stored?.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(stored?.passwordHash).not.toBe(storekeeper.passwordHash);
+  });
+
+  it('rolls back a stock approval when its audit write fails', async () => {
+    const administrator = await createUser('Admin', 'admin@example.com');
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@example.com', password })
+      .expect(200);
+    const action = await StockAction.create({
+      actionNo: 'TEST-AUDIT-ROLLBACK',
+      actionType: 'ADJUSTMENT',
+      payload: {
+        itemId: String(new Types.ObjectId()),
+        locationId: String(new Types.ObjectId()),
+        quantity: '1',
+        direction: 'IN',
+        unitCost: '1',
+        reason: 'Test fixture',
+      },
+      requestedBy: new Types.ObjectId(),
+    });
+    const auditCount = await AuditLog.countDocuments();
+    const auditFailure = vi
+      .spyOn(AuditLog, 'create')
+      .mockRejectedValueOnce(new Error('simulated audit write failure'));
+    try {
+      const failed = await request(app)
+        .post(`/api/v1/inventory/requests/${action._id}/approve`)
+        .set('Authorization', `Bearer ${login.body.data.accessToken}`)
+        .expect(500);
+      expect(failed.body.error.message).toBe('simulated audit write failure');
+    } finally {
+      auditFailure.mockRestore();
+    }
+    expect((await StockAction.findById(action._id))?.status).toBe('PENDING_APPROVAL');
+    expect(await AuditLog.countDocuments()).toBe(auditCount);
+    expect(
+      await AuditLog.countDocuments({ actorId: administrator._id, action: 'stock.action.approve' }),
+    ).toBe(0);
   });
 
   it('locks an account after repeated failed password attempts', async () => {

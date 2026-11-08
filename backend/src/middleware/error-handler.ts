@@ -42,7 +42,11 @@ export function createErrorHandler(options: {
       };
     } else if (isMongoDuplicateKey(err)) {
       status = 409;
-      body = { code: 'CONFLICT', message: 'Duplicate value', details: err.keyValue };
+      body = {
+        code: 'CONFLICT',
+        message: 'Duplicate value',
+        ...(options.exposeInternalErrors ? { details: err.keyValue } : {}),
+      };
     } else if (isJsonParseError(err)) {
       status = 400;
       body = { code: 'BAD_REQUEST', message: 'Malformed JSON body' };
