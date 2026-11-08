@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@ims/shared": "^0.1.0",
+    "@redis/client": "6.3.1",
     "argon2": "^0.45.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

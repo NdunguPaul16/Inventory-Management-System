@@ -5,11 +5,32 @@ import { EnvValidationError, loadEnvFile, parseEnv } from './config/env.js';
 import { createLogger } from './config/logger.js';
 import { migrateLegacyAuditLog } from './modules/audit/migrate.js';
 import { seedDefaultRoles } from './modules/roles/service.js';
+import { loginRateLimiter, MemoryRateLimitStore } from './modules/auth/rate-limit.js';
+import { createRedisRateLimitStore } from './modules/auth/redis-rate-limit-store.js';
 
 async function main(): Promise<void> {
   loadEnvFile();
   const env = parseEnv(process.env);
   const logger = createLogger(env);
+  let redisStore: ReturnType<typeof createRedisRateLimitStore> | undefined;
+  if (env.AUTH_RATE_LIMIT_REDIS_URL) {
+    try {
+      redisStore = createRedisRateLimitStore(env.AUTH_RATE_LIMIT_REDIS_URL, logger);
+      await redisStore.connect();
+    } catch {
+      await redisStore?.close();
+      throw new Error('Authentication rate-limit store connection failed');
+    }
+  }
+  const loginLimiter = loginRateLimiter({
+    store: redisStore ?? new MemoryRateLimitStore(),
+    keySecret: env.AUTH_ACCESS_TOKEN_SECRET,
+    policy: {
+      perIpMinute: env.AUTH_LOGIN_LIMIT_PER_IP_MINUTE,
+      perIpHour: env.AUTH_LOGIN_LIMIT_PER_IP_HOUR,
+      perAccountFifteenMinutes: env.AUTH_LOGIN_LIMIT_PER_ACCOUNT_15_MIN,
+    },
+  });
 
   let mongoUri = env.MONGODB_URI;
   let stopInMemoryDb: (() => Promise<unknown>) | undefined;
@@ -28,6 +49,9 @@ async function main(): Promise<void> {
     logger,
     environment: env.NODE_ENV,
     corsOrigins: env.CORS_ORIGINS,
+    trustedProxyCidrs: env.AUTH_TRUSTED_PROXY_CIDRS,
+    loginLimiter,
+    rateLimitReady: () => redisStore?.isReady() ?? true,
     auth: {
       accessTokenSecret: env.AUTH_ACCESS_TOKEN_SECRET,
       refreshTokenSecret: env.AUTH_REFRESH_TOKEN_SECRET,
@@ -60,6 +84,7 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'Shutting down');
     server.close();
     await disconnectDb().catch((err: unknown) => logger.error({ err }, 'DB disconnect failed'));
+    await redisStore?.close();
     await stopInMemoryDb?.();
     process.exit(0);
   };

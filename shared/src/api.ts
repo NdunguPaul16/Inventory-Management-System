@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   'CONFLICT',
   'INSUFFICIENT_STOCK',
   'SERVICE_UNAVAILABLE',
+  'RATE_LIMITED',
   'INTERNAL_ERROR',
 ] as const;
 

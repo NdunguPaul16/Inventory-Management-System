@@ -22,6 +22,7 @@ export const healthSchema = z.object({
     state: z.enum(DB_STATES),
     latencyMs: z.number().nonnegative().nullable(),
   }),
+  authRateLimit: z.object({ status: z.enum(['up', 'down']) }).optional(),
   time: z.iso.datetime(),
 });
 export type Health = z.infer<typeof healthSchema>;

@@ -10,6 +10,8 @@ describe('parseEnv', () => {
       LOG_LEVEL: 'info',
       MONGODB_DB_NAME: 'ims',
       CORS_ORIGINS: ['http://localhost:5173'],
+      AUTH_TRUSTED_PROXY_CIDRS: [],
+      AUTH_LOGIN_LIMIT_PER_IP_MINUTE: 10,
     });
     expect(env.MONGODB_URI).toBeUndefined();
   });
@@ -39,5 +41,30 @@ describe('parseEnv', () => {
 
   it('requires MONGODB_URI in production', () => {
     expect(() => parseEnv({ NODE_ENV: 'production' })).toThrow(/MONGODB_URI is required/);
+  });
+
+  it('requires a shared rate-limit store in production', () => {
+    expect(() =>
+      parseEnv({
+        NODE_ENV: 'production',
+        MONGODB_URI: 'mongodb://localhost:27017/test',
+        AUTH_ACCESS_TOKEN_SECRET: 'production-access-token-secret-at-least-32-characters',
+        AUTH_REFRESH_TOKEN_SECRET: 'production-refresh-token-secret-at-least-32-characters',
+      }),
+    ).toThrow(/AUTH_RATE_LIMIT_REDIS_URL is required/);
+  });
+
+  it('accepts explicit proxy ranges and rejects malformed ranges or limits', () => {
+    const env = parseEnv({
+      AUTH_TRUSTED_PROXY_CIDRS: 'loopback, 203.0.113.0/24, 2001:db8::/32',
+      AUTH_LOGIN_LIMIT_PER_IP_MINUTE: '20',
+    });
+    expect(env.AUTH_TRUSTED_PROXY_CIDRS).toEqual(['loopback', '203.0.113.0/24', '2001:db8::/32']);
+    expect(env.AUTH_LOGIN_LIMIT_PER_IP_MINUTE).toBe(20);
+    expect(() => parseEnv({ AUTH_TRUSTED_PROXY_CIDRS: 'anywhere' })).toThrow(EnvValidationError);
+    expect(() => parseEnv({ AUTH_TRUSTED_PROXY_CIDRS: '203.0.113.0/40' })).toThrow(
+      EnvValidationError,
+    );
+    expect(() => parseEnv({ AUTH_LOGIN_LIMIT_PER_IP_MINUTE: '0' })).toThrow(EnvValidationError);
   });
 });

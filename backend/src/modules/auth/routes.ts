@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { authUserResponseSchema, loginSchema } from '@ims/shared';
 import { AppError } from '../../lib/errors.js';
 import { requireAuthenticated } from '../../middleware/require-permission.js';
@@ -13,10 +13,10 @@ import {
 
 const REFRESH_COOKIE = 'ims_refresh';
 
-export function authRoutes(config: AuthConfig): Router {
+export function authRoutes(config: AuthConfig, loginLimiter: RequestHandler): Router {
   const router = Router();
 
-  router.post('/login', validate({ body: loginSchema }), async (_req, res) => {
+  router.post('/login', validate({ body: loginSchema }), loginLimiter, async (_req, res) => {
     const result = await authenticateCredentials(res.locals.validated!.body as never, config);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions(config));
     res.json({ data: { user: result.user, accessToken: result.accessToken }, meta: {} });

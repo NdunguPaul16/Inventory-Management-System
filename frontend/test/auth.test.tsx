@@ -18,7 +18,12 @@ function anonymousFetch(loginStatus = 200, loginMessage = '') {
     if (url === '/api/v1/auth/login') {
       return loginStatus === 200
         ? jsonResponse(200, sessionBody())
-        : jsonResponse(loginStatus, { error: { code: 'UNAUTHENTICATED', message: loginMessage } });
+        : jsonResponse(loginStatus, {
+            error: {
+              code: loginStatus === 429 ? 'RATE_LIMITED' : 'UNAUTHENTICATED',
+              message: loginMessage,
+            },
+          });
     }
     if (url === '/api/v1/auth/me') return jsonResponse(200, { data: testUser(), meta: {} });
     return jsonResponse(200, healthBody());
@@ -109,6 +114,16 @@ describe('frontend authentication', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Invalid email or password');
     expect(alert).not.toHaveTextContent(/locked|failed attempts/i);
+  });
+
+  it('shows a safe wait message when login is rate limited', async () => {
+    anonymousFetch(429, 'Too many sign-in attempts; try again later');
+    renderRoute('/login');
+    await screen.findByRole('heading', { name: 'Sign in to your account' });
+    await fillLogin();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Too many sign-in attempts. Please wait and try again.');
+    expect(alert).not.toHaveTextContent(/account|locked/i);
   });
 
   it('restores a refresh-cookie session and logs out through the backend', async () => {

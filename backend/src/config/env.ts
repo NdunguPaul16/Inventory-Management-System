@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { z } from '@ims/shared';
 
@@ -9,6 +10,18 @@ const optionalString = z
   .trim()
   .optional()
   .transform((v) => (v ? v : undefined));
+
+function validProxyRange(value: string): boolean {
+  if (['loopback', 'linklocal', 'uniquelocal'].includes(value)) return true;
+  const [address, prefix, extra] = value.split('/');
+  if (!address || extra !== undefined) return false;
+  const version = isIP(address);
+  if (!version) return false;
+  if (prefix === undefined) return true;
+  if (!/^\d+$/.test(prefix)) return false;
+  const bits = Number(prefix);
+  return bits >= 0 && bits <= (version === 4 ? 32 : 128);
+}
 
 export const envSchema = z
   .object({
@@ -29,6 +42,24 @@ export const envSchema = z
       .string()
       .min(32)
       .default('development-refresh-token-secret-change-before-production'),
+    /** Internal Render Key Value URL. Required for shared production login counters. */
+    AUTH_RATE_LIMIT_REDIS_URL: optionalString.refine(
+      (v) => v === undefined || /^rediss?:\/\//.test(v),
+      'must be a redis:// or rediss:// URL',
+    ),
+    /** Only explicitly verified proxy IP ranges may supply X-Forwarded-For. */
+    AUTH_TRUSTED_PROXY_CIDRS: z
+      .string()
+      .default('')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    AUTH_LOGIN_LIMIT_PER_IP_MINUTE: z.coerce.number().int().min(1).max(1_000).default(10),
+    AUTH_LOGIN_LIMIT_PER_IP_HOUR: z.coerce.number().int().min(1).max(10_000).default(60),
+    AUTH_LOGIN_LIMIT_PER_ACCOUNT_15_MIN: z.coerce.number().int().min(1).max(1_000).default(5),
     /** Comma-separated list of origins allowed by CORS. */
     CORS_ORIGINS: z
       .string()
@@ -47,6 +78,22 @@ export const envSchema = z
         path: ['MONGODB_URI'],
         message: 'MONGODB_URI is required in production',
       });
+    }
+    if (env.NODE_ENV === 'production' && !env.AUTH_RATE_LIMIT_REDIS_URL) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AUTH_RATE_LIMIT_REDIS_URL'],
+        message: 'AUTH_RATE_LIMIT_REDIS_URL is required in production',
+      });
+    }
+    for (const [index, range] of env.AUTH_TRUSTED_PROXY_CIDRS.entries()) {
+      if (!validProxyRange(range)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['AUTH_TRUSTED_PROXY_CIDRS', index],
+          message: 'must be a valid IP/CIDR range or a known proxy group',
+        });
+      }
     }
     if (
       env.NODE_ENV === 'production' &&

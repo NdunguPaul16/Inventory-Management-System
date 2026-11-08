@@ -4,18 +4,22 @@ import request from 'supertest';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { AuditLog } from '../src/modules/audit/model.js';
+import { migrateLegacyAuditLog } from '../src/modules/audit/migrate.js';
 import { Session } from '../src/modules/auth/model.js';
 import { Role } from '../src/modules/roles/model.js';
 import { seedDefaultRoles } from '../src/modules/roles/service.js';
 import { User } from '../src/modules/users/model.js';
 import { PASSWORD_HASH_OPTIONS } from '../src/modules/users/service.js';
-import { createTestApp, silentLogger } from './helpers.js';
+import { createTestApp, silentLogger, unlimitedTestLoginLimiter } from './helpers.js';
 
 const app = createTestApp();
 const productionApp = createApp({
   logger: silentLogger,
   environment: 'production',
   corsOrigins: ['https://inventory.example.com'],
+  trustedProxyCidrs: [],
+  loginLimiter: unlimitedTestLoginLimiter,
+  rateLimitReady: () => true,
   auth: {
     accessTokenSecret: 'test-access-token-secret-that-is-at-least-32-characters',
     refreshTokenSecret: 'test-refresh-token-secret-that-is-at-least-32-characters',
@@ -244,6 +248,36 @@ describe('read-only audit history', () => {
     expect(detail.body.data.metadata).toEqual({ reason: 'invalid_password' });
     expect(historical.body.data.entityId).toBe('[redacted]');
     expect(historical.body.data.action).toBe('[redacted]');
+  });
+
+  it('preserves a legacy audit_log record through migration and redacts it on read', async () => {
+    const authorization = await signedIn('Admin');
+    const db = AuditLog.db.db;
+    if (!db) throw new Error('Test database is not connected');
+    const legacyId = new Types.ObjectId();
+    await db.collection('audit_log').insertOne({
+      _id: legacyId,
+      action: 'legacy.event',
+      entityType: 'user',
+      entityId: 'private@example.com',
+      at: new Date(),
+      details: { password: 'historical-secret', isActive: false },
+    });
+    await migrateLegacyAuditLog();
+    const stored = await AuditLog.findById(legacyId);
+    expect(stored?.metadata).toEqual({ password: 'historical-secret', isActive: false });
+    const detail = await request(app)
+      .get(`/api/v1/audit-logs/${legacyId}`)
+      .set('Authorization', authorization)
+      .expect(200);
+    expect(detail.body.data).toMatchObject({
+      id: String(legacyId),
+      action: '[redacted]',
+      entityId: '[redacted]',
+      metadata: { isActive: false },
+    });
+    expect(JSON.stringify(detail.body)).not.toContain('historical-secret');
+    expect(JSON.stringify(detail.body)).not.toContain('private@example.com');
   });
 
   it('audits a read once with safe metadata and releases no history if auditing fails', async () => {

@@ -24,6 +24,7 @@ export function healthBody(overrides: Partial<HealthResponse['data']> = {}): Hea
       status: 'ok',
       app: { name: '@ims/server', version: '0.1.0', environment: 'test', uptimeSeconds: 125 },
       db: { status: 'up', state: 'connected', latencyMs: 3 },
+      authRateLimit: { status: 'up' },
       time: '2026-10-01T07:00:00.000Z',
       ...overrides,
     },

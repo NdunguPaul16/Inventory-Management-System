@@ -16,13 +16,16 @@ import {
   bootstrapAdministrator,
   updateUser,
 } from '../src/modules/users/service.js';
-import { createTestApp, silentLogger } from './helpers.js';
+import { createTestApp, silentLogger, unlimitedTestLoginLimiter } from './helpers.js';
 
 const app = createTestApp();
 const productionApp = createApp({
   logger: silentLogger,
   environment: 'production',
   corsOrigins: ['https://inventory.example.com'],
+  trustedProxyCidrs: [],
+  loginLimiter: unlimitedTestLoginLimiter,
+  rateLimitReady: () => true,
   auth: {
     accessTokenSecret: 'test-access-token-secret-that-is-at-least-32-characters',
     refreshTokenSecret: 'test-refresh-token-secret-that-is-at-least-32-characters',

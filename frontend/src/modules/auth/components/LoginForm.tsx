@@ -45,6 +45,8 @@ export function LoginForm({ returnTo }: { returnTo: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status === 401) {
         setSubmitError(error.message);
+      } else if (error instanceof ApiRequestError && error.status === 429) {
+        setSubmitError('Too many sign-in attempts. Please wait and try again.');
       } else {
         setSubmitError('Sign in is unavailable right now. Please try again.');
       }

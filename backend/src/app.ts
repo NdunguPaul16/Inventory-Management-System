@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import express, { Router, type Express } from 'express';
+import express, { Router, type Express, type RequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -20,12 +20,16 @@ export interface AppOptions {
   environment: 'development' | 'test' | 'production';
   corsOrigins: string[];
   auth: AuthConfig;
+  loginLimiter: RequestHandler;
+  rateLimitReady: () => boolean;
+  trustedProxyCidrs: string[];
 }
 
 const REQUEST_ID_HEADER = 'x-request-id';
 
 export function createApp(options: AppOptions): Express {
   const app = express();
+  app.set('trust proxy', options.trustedProxyCidrs.length ? options.trustedProxyCidrs : false);
 
   // Logging goes first so every later middleware (and the error handler) has req.log.
   app.use(
@@ -44,7 +48,6 @@ export function createApp(options: AppOptions): Express {
     }),
   );
 
-  // TODO(phase-10): set `trust proxy` once the production hosting is chosen.
   app.use(helmet());
   app.use(cors({ origin: options.corsOrigins, credentials: true }));
   app.use(cookieParser());
@@ -52,8 +55,8 @@ export function createApp(options: AppOptions): Express {
   app.use(authenticate(options.auth));
 
   const api = Router();
-  api.use('/health', healthRoutes(options.environment));
-  api.use('/auth', authRoutes(options.auth));
+  api.use('/health', healthRoutes(options.environment, options.rateLimitReady));
+  api.use('/auth', authRoutes(options.auth, options.loginLimiter));
   api.use('/users', userRoutes);
   api.use('/roles', roleRoutes);
   api.use('/audit-logs', auditRoutes);

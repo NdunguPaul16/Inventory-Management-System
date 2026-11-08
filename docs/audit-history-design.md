@@ -2,7 +2,9 @@
 
 **Status:** Implemented locally on `feature/audit-history`, based on the authentication-security
 commits. This implementation has not been pushed, merged, or deployed. The design below remains
-the contract; production query plans and rate limits need review before release.
+the contract; a 20,000-row disposable-database index rehearsal and the production migration/rollback
+steps are recorded in [the index migration plan](audit-history-index-migration.md). Production query
+plans and rate limits still need review before release.
 
 ## Existing foundation
 
