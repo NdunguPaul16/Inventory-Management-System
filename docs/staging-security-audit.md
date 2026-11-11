@@ -17,6 +17,9 @@ alone does not deploy the backend specified by this branch's `render.yaml`, beca
 `autoDeployTrigger` is `off`. If creating a Render web service manually, set Auto-Deploy
 to **Off** in its Settings; the Blueprint file does not configure a manually created
 service. Refresh Render's repository/branch selector after the approved push.
+The branch-specific `git.deploymentEnabled` setting in `frontend/vercel.json` also
+suppresses Vercel's automatic preview deployment on that push. Verify the Vercel
+project has not overridden this setting in its dashboard.
 
 ## Render service settings
 
@@ -54,19 +57,19 @@ staging test temporarily changes them. Restore the defaults afterward. Do not ru
 the administrator bootstrap against production Atlas; confirm the isolation check and
 database identity first, then create only controlled staging accounts.
 
-`start:staging` runs `check-staging-env` before opening the API. It refuses to start
+Both `start` and `start:staging` run `check-staging-env` before opening the API. It refuses to start
 unless the URI hostnames match the pinned staging hosts, the Atlas host differs from
 the production host, and `MONGODB_DB_NAME` is `ims_staging`. Validation errors omit
 connection strings and credentials. The check accepts an Atlas `mongodb+srv://` URI.
 
 ## Vercel preview routing
 
-The staging branch's `frontend/vercel.json` returns `503` for `/api/*` and contains
-no production Render rewrite. This deliberately keeps a Vercel preview from contacting
-the production backend while the staging Render URL is unknown. The frontend cannot
-complete login through that preview yet. Once the new staging Render URL exists,
-replace the `503` route with an external rewrite to **that exact staging URL**, rerun
-checks, and inspect the preview's `/api/v1/health` response before any login test.
+The staging branch's `frontend/vercel.json` disables automatic Vercel deployments for
+this branch, returns `503` for `/api/*` if deployed manually, and contains no production
+Render rewrite. The frontend cannot complete login through such a preview yet. Once
+the new staging Render URL exists, replace the `503` route with an external rewrite to
+**that exact staging URL**, enable a staging preview as a separately approved action,
+rerun checks, and inspect its `/api/v1/health` response before any login test.
 Check the Vercel project dashboard for any routing rules outside this repository.
 
 ## Evidence required before integration
