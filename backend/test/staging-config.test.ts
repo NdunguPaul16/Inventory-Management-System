@@ -21,15 +21,27 @@ describe('staging deployment configuration', () => {
     const vercel = JSON.parse(
       readFileSync(new URL('../../frontend/vercel.json', import.meta.url), 'utf8'),
     ) as {
+      framework: string;
+      installCommand: string;
+      buildCommand: string;
+      outputDirectory: string;
       git: { deploymentEnabled: Record<string, boolean> };
-      routes: { src: string; status: number }[];
+      routes?: { src: string; status: number }[];
       rewrites: { source: string; destination: string }[];
     };
-    expect(vercel.routes).toContainEqual(
-      expect.objectContaining({ src: '/api(?:/.*)?', status: 503 }),
-    );
+    expect(vercel.framework).toBe('vite');
+    expect(vercel.installCommand).toBe('npm ci --include=dev --prefix ..');
+    expect(vercel.buildCommand).toBe('npm run build:shared --prefix .. && npm run build');
+    expect(vercel.outputDirectory).toBe('dist');
+    expect(vercel.routes).toBeUndefined();
     expect(vercel.git.deploymentEnabled).toEqual({ 'staging/security-audit': false });
-    expect(vercel.rewrites).toEqual([{ source: '/(.*)', destination: '/index.html' }]);
-    expect(JSON.stringify(vercel)).not.toContain('onrender.com');
+    expect(vercel.rewrites).toEqual([
+      {
+        source: '/api/:path*',
+        destination: 'https://inventory-inc-staging-backend.onrender.com/api/:path*',
+      },
+      { source: '/(.*)', destination: '/index.html' },
+    ]);
+    expect(JSON.stringify(vercel)).not.toContain('inventory-management-backend-jn2c.onrender.com');
   });
 });

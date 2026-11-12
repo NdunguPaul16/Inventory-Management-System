@@ -108,13 +108,34 @@ must be verified explicitly; its presence cannot be inferred from a healthy API.
 
 ## Vercel preview routing
 
-The staging branch's `frontend/vercel.json` disables automatic Vercel deployments for
-this branch, returns `503` for `/api/*` if deployed manually, and contains no production
-Render rewrite. The frontend cannot complete login through such a preview yet. Once
-the new staging Render URL exists, replace the `503` route with an external rewrite to
-**that exact staging URL**, enable a staging preview as a separately approved action,
-rerun checks, and inspect its `/api/v1/health` response before any login test.
-Check the Vercel project dashboard for any routing rules outside this repository.
+The staging branch's `frontend/vercel.json` retains
+`git.deploymentEnabled: { "staging/security-audit": false }`, so a Git push must not
+automatically create a Preview. It now rewrites `/api/:path*` to the exact staging
+Render origin `https://inventory-inc-staging-backend.onrender.com/api/:path*` before
+the SPA fallback to `/index.html`. It contains no production backend URL. The
+frontend uses same-origin `/api/v1` calls; no frontend API-origin environment value
+is needed. These repository changes do not deploy a Preview.
+
+Before a separately approved manual Preview, check the Vercel project has Production
+Branch `dfstock`, Root Directory `frontend/`, and **Include source files outside of
+the Root Directory in the Build Step** enabled so the root lockfile and `shared/`
+workspace are available. Check Settings > Deployment Protection: Vercel
+Authentication with Standard Protection (or a stronger existing setting) must cover
+Preview URLs, with no bypass or public sharing enabled. Check the project dashboard
+for routing rules outside this repository; do not change production settings.
+
+After the reviewed staging commit is pushed, use Vercel Project > Deployments >
+Create Deployment and enter the **exact staging commit SHA** as the Git reference.
+If Vercel asks which branch configuration to use, choose `staging/security-audit` and
+confirm the target is **Preview**, never Production. Inspect the Preview build and
+its protection before sharing the URL. Open `/api/v1/health` on the protected Preview
+and compare its response with the staging Render endpoint. A Vercel sign-in prompt
+for an unauthorised browser confirms Preview protection; the health response behind
+it should report the staging API, MongoDB connected, and `authRateLimit: up`.
+Once the Preview URL is known, set the staging Render service's `CORS_ORIGINS` to that
+exact `https://...vercel.app` origin before browser login tests; any Render config
+save/redeploy is a separate approved action. Keep the staging Render backend public
+URL in mind: Vercel Preview protection does not itself restrict direct backend access.
 
 ## Evidence required before integration
 

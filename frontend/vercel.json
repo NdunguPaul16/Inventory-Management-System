@@ -7,12 +7,11 @@
   "git": {
     "deploymentEnabled": { "staging/security-audit": false }
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api(?:/.*)?",
-      "status": 503,
-      "headers": { "Cache-Control": "no-store" }
-    }
-  ],
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+      "source": "/api/:path*",
+      "destination": "https://inventory-inc-staging-backend.onrender.com/api/:path*"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
