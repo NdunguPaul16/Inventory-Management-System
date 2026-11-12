@@ -61,6 +61,50 @@ Both `start` and `start:staging` run `check-staging-env` before opening the API.
 unless the URI hostnames match the pinned staging hosts, the Atlas host differs from
 the production host, and `MONGODB_DB_NAME` is `ims_staging`. Validation errors omit
 connection strings and credentials. The check accepts an Atlas `mongodb+srv://` URI.
+The staging branch's `bootstrap:admin` command runs the same preflight, and its CLI
+rechecks isolation before it asks for credentials or connects to MongoDB. Use this
+command only after verifying the staging service and database identity. A Free Render
+web service has neither Shell nor one-off jobs; if that is the selected plan, run the
+built CLI locally from this staging branch with staging-only Atlas credentials and the
+same pinned variables. Never use a production service environment for this command.
+
+## Read-only isolation and database preflight
+
+The public health response proves the API can ping MongoDB and that its login limiter
+store is available. It does not report the database name, confirm role seeding, or
+identify the deployed commit. In the **staging** Render dashboard, confirm the service
+branch and deployed commit, the `start:staging` command, and these startup log entries:
+`Staging isolation check passed` and `MongoDB connected` with `dbName: ims_staging`.
+Check that `Identity bootstrap failed` is absent after connection. Compare the masked
+environment's `STAGING_ATLAS_HOST`, `PRODUCTION_ATLAS_HOST`, and
+`STAGING_KEY_VALUE_HOST` to the separate staging resources in Atlas and Render; the
+configured staging and production Atlas hostnames must differ. `render.yaml` describes
+a staging Blueprint but does not prove the settings of a manually created service.
+
+For database checks, connect a read-only client **only to the separately identified
+staging Atlas cluster**, with a user restricted to `ims_staging`. Confirm the host and
+selected database before any query. Do not connect to production or run the bootstrap
+as part of this review. These `mongosh` commands do not write data:
+
+```javascript
+db.getName() // must be ims_staging
+db.roles.find({ isSystem: true }, { _id: 0, name: 1 }).sort({ name: 1 }).toArray()
+db.roles.countDocuments({ isSystem: true }) // expect the eight default roles
+db.users.countDocuments({}) // if nonzero, bootstrap must refuse
+db.audit_logs.getIndexes() // inspect at_-1__id_-1 and its { at: -1, _id: -1 } key
+db.runCommand({ connectionStatus: 1, showPrivileges: true }).authInfo
+```
+
+The last result verifies only the connected read-only client's privileges. In Atlas
+Database Access, separately inspect the database user named in the staging service's
+protected URI: it must be scoped to `ims_staging`, with no `ims` or all-database write
+privilege. Do not paste credentials or full privilege results into tickets or chat;
+report only the scope and whether it passed.
+The eight expected role names are Admin, Owner / Manager, Purchasing Officer,
+Storekeeper, Workshop Supervisor, Sales Officer, Accountant, and Viewer / Auditor.
+If they are missing, inspect the staging startup logs before provisioning an admin.
+The application starts with `autoIndex: false` in production runtime, so the index
+must be verified explicitly; its presence cannot be inferred from a healthy API.
 
 ## Vercel preview routing
 

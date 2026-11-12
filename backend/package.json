@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "npm run start:staging",
     "start:staging": "node dist/cli/check-staging-env.js && node dist/index.js",
-    "bootstrap:admin": "node dist/cli/bootstrap-admin.js",
+    "bootstrap:admin": "node dist/cli/check-staging-env.js && node dist/cli/bootstrap-admin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

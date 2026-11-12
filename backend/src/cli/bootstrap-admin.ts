@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import { bootstrapAdminSchema } from '@ims/shared';
 import { connectDb, disconnectDb } from '../config/db.js';
 import { EnvValidationError, loadEnvFile, parseEnv } from '../config/env.js';
+import { assertStagingIsolation } from '../config/staging-isolation.js';
 import { seedDefaultRoles } from '../modules/roles/service.js';
 import { User } from '../modules/users/model.js';
 import { bootstrapAdministrator } from '../modules/users/service.js';
@@ -102,6 +103,14 @@ async function main(): Promise<void> {
     const env = parseEnv(process.env);
     if (!env.MONGODB_URI) {
       throw new CliError('MONGODB_URI must point to the intended persistent database.');
+    }
+    // The staging CLI must reject an unsafe target before asking for credentials or connecting.
+    try {
+      assertStagingIsolation(process.env);
+    } catch (error) {
+      throw new CliError(
+        error instanceof Error ? error.message : 'Staging isolation check failed.',
+      );
     }
     const credentials = await promptCredentials();
 
