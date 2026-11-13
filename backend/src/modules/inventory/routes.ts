@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import {
   adjustmentSchema,
   openingStockSchema,
@@ -20,13 +20,14 @@ import {
   transfer,
 } from './engine/service.js';
 import { AppError } from '../../lib/errors.js';
-import { requireAuthenticated, requirePermission } from '../../middleware/require-permission.js';
+import { requirePermission } from '../../middleware/require-permission.js';
 import { validate } from '../../middleware/validate.js';
 import {
   approveStockAction,
   createStockAction,
   getStockAction,
   listStockActions,
+  permittedStockActionTypes,
   postStockAction,
   rejectStockAction,
 } from './action-service.js';
@@ -51,6 +52,17 @@ function permissions(res: Response): readonly string[] {
   const granted = res.locals.auth?.permissions;
   if (!granted) throw AppError.unauthenticated();
   return granted;
+}
+
+function requireStockActionOperation(operation: 'approve' | 'post'): RequestHandler {
+  return (_req, res, next) => {
+    const granted = res.locals.auth?.permissions;
+    if (!granted) return next(AppError.unauthenticated('Sign in is required'));
+    if (permittedStockActionTypes(granted, operation).length === 0) {
+      return next(AppError.forbidden());
+    }
+    return next();
+  };
 }
 
 export const inventoryRoutes = Router();
@@ -167,7 +179,7 @@ inventoryRoutes.get(
 
 inventoryRoutes.post(
   '/requests/:requestId/approve',
-  requireAuthenticated,
+  requireStockActionOperation('approve'),
   validate({ params: requestParams }),
   async (_req, res) => {
     const params = res.locals.validated?.params as z.infer<typeof requestParams>;
@@ -178,7 +190,7 @@ inventoryRoutes.post(
 
 inventoryRoutes.post(
   '/requests/:requestId/reject',
-  requireAuthenticated,
+  requireStockActionOperation('approve'),
   validate({ params: requestParams, body: rejectStockActionSchema }),
   async (_req, res) => {
     const params = res.locals.validated?.params as z.infer<typeof requestParams>;
@@ -195,7 +207,7 @@ inventoryRoutes.post(
 
 inventoryRoutes.post(
   '/requests/:requestId/post',
-  requireAuthenticated,
+  requireStockActionOperation('post'),
   validate({ params: requestParams }),
   async (_req, res) => {
     const params = res.locals.validated?.params as z.infer<typeof requestParams>;

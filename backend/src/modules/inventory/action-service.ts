@@ -13,6 +13,21 @@ type ReversalRequest = { movementId: string; reason: string };
 type ActionPayload = OpeningStockInput | AdjustmentInput | ReversalRequest;
 type ActionOperation = 'request' | 'approve' | 'post';
 
+export function permittedStockActionTypes(
+  permissions: readonly string[],
+  operation: 'approve' | 'post',
+): StockActionType[] {
+  return (['OPENING', 'ADJUSTMENT', 'REVERSAL'] as const).filter((actionType) => {
+    const area =
+      actionType === 'OPENING'
+        ? 'opening'
+        : actionType === 'ADJUSTMENT'
+          ? 'adjustments'
+          : 'movements.reverse';
+    return hasPermission(permissions, `inventory.${area}.${operation}`);
+  });
+}
+
 function id(value: string, field: string): Types.ObjectId {
   if (!Types.ObjectId.isValid(value)) throw AppError.badRequest(`${field} must be a valid id`);
   return new Types.ObjectId(value);
@@ -125,11 +140,16 @@ export async function approveStockAction(
   actorId: string,
   permissions: readonly string[],
 ) {
+  const permittedTypes = permittedStockActionTypes(permissions, 'approve');
+  if (permittedTypes.length === 0) throw AppError.forbidden();
   const approver = id(actorId, 'actorId');
   const session = await mongoose.startSession();
   try {
     const result = await session.withTransaction(async () => {
-      const action = await StockAction.findById(id(actionId, 'actionId')).session(session);
+      const action = await StockAction.findOne({
+        _id: id(actionId, 'actionId'),
+        actionType: { $in: permittedTypes },
+      }).session(session);
       if (!action) throw AppError.notFound('Stock action request not found');
       requireActionPermission(permissions, action.actionType, 'approve');
       if (action.status !== 'PENDING_APPROVAL')
@@ -175,11 +195,16 @@ export async function rejectStockAction(
   permissions: readonly string[],
   reason: string,
 ) {
+  const permittedTypes = permittedStockActionTypes(permissions, 'approve');
+  if (permittedTypes.length === 0) throw AppError.forbidden();
   const approver = id(actorId, 'actorId');
   const session = await mongoose.startSession();
   try {
     const result = await session.withTransaction(async () => {
-      const action = await StockAction.findById(id(actionId, 'actionId')).session(session);
+      const action = await StockAction.findOne({
+        _id: id(actionId, 'actionId'),
+        actionType: { $in: permittedTypes },
+      }).session(session);
       if (!action) throw AppError.notFound('Stock action request not found');
       requireActionPermission(permissions, action.actionType, 'approve');
       if (action.status !== 'PENDING_APPROVAL')
@@ -275,7 +300,12 @@ export async function postStockAction(
   actorId: string,
   permissions: readonly string[],
 ) {
-  const action = await StockAction.findById(id(actionId, 'actionId'));
+  const permittedTypes = permittedStockActionTypes(permissions, 'post');
+  if (permittedTypes.length === 0) throw AppError.forbidden();
+  const action = await StockAction.findOne({
+    _id: id(actionId, 'actionId'),
+    actionType: { $in: permittedTypes },
+  });
   if (!action) throw AppError.notFound('Stock action request not found');
   requireActionPermission(permissions, action.actionType, 'post');
   if (action.status !== 'APPROVED' && action.status !== 'POSTED') {

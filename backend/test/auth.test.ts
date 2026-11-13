@@ -629,6 +629,113 @@ describe('authentication and roles', () => {
     }
   });
 
+  it('denies stock approval, rejection and posting before request lookup when no action permission is held', async () => {
+    await createUser('Storekeeper', 'storekeeper@example.com');
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'storekeeper@example.com', password })
+      .expect(200);
+    const authorization = `Bearer ${login.body.data.accessToken}`;
+    const action = await StockAction.create({
+      actionNo: 'TEST-RESTRICTED-REQUEST',
+      actionType: 'OPENING',
+      payload: { secret: 'restricted request details' },
+      requestedBy: new Types.ObjectId(),
+    });
+    for (const operation of ['approve', 'reject', 'post']) {
+      for (const requestId of [String(action._id), String(new Types.ObjectId())]) {
+        const response = await request(app)
+          .post(`/api/v1/inventory/requests/${requestId}/${operation}`)
+          .set('Authorization', authorization)
+          .send(operation === 'reject' ? { reason: 'Not approved' } : {})
+          .expect(403);
+        expect(JSON.stringify(response.body)).not.toContain('restricted request details');
+      }
+    }
+    expect((await StockAction.findById(action._id))?.status).toBe('PENDING_APPROVAL');
+  });
+
+  it('conceals requests outside a scoped action permission while preserving allowed approval', async () => {
+    const role = await Role.create({
+      name: 'Opening action approver',
+      permissions: ['inventory.opening.approve', 'inventory.opening.post'],
+      isSystem: false,
+    });
+    const user = await User.create({
+      name: 'Scoped approver',
+      email: 'scoped@example.com',
+      passwordHash: await argon2.hash(password, PASSWORD_HASH_OPTIONS),
+      roleIds: [role._id],
+    });
+    const login = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'scoped@example.com', password })
+      .expect(200);
+    const authorization = `Bearer ${login.body.data.accessToken}`;
+    const restricted = await StockAction.create({
+      actionNo: 'TEST-RESTRICTED-ADJUSTMENT',
+      actionType: 'ADJUSTMENT',
+      payload: { secret: 'restricted adjustment details' },
+      requestedBy: new Types.ObjectId(),
+    });
+    const missingId = String(new Types.ObjectId());
+    for (const operation of ['approve', 'reject', 'post']) {
+      for (const requestId of [String(restricted._id), missingId]) {
+        const response = await request(app)
+          .post(`/api/v1/inventory/requests/${requestId}/${operation}`)
+          .set('Authorization', authorization)
+          .send(operation === 'reject' ? { reason: 'Not approved' } : {})
+          .expect(404);
+        expect(JSON.stringify(response.body)).not.toContain('restricted adjustment details');
+      }
+    }
+    const allowed = await StockAction.create({
+      actionNo: 'TEST-ALLOWED-OPENING',
+      actionType: 'OPENING',
+      payload: {
+        itemId: String(new Types.ObjectId()),
+        locationId: String(new Types.ObjectId()),
+        quantity: '1',
+        unitCost: '1',
+      },
+      requestedBy: new Types.ObjectId(),
+    });
+    await request(app)
+      .post(`/api/v1/inventory/requests/${allowed._id}/approve`)
+      .set('Authorization', authorization)
+      .expect(200);
+    expect((await StockAction.findById(allowed._id))?.approvedBy?.toString()).toBe(
+      String(user._id),
+    );
+    const rejectable = await StockAction.create({
+      actionNo: 'TEST-ALLOWED-REJECTION',
+      actionType: 'OPENING',
+      payload: allowed.payload,
+      requestedBy: new Types.ObjectId(),
+    });
+    await request(app)
+      .post(`/api/v1/inventory/requests/${rejectable._id}/reject`)
+      .set('Authorization', authorization)
+      .send({ reason: 'Incorrect opening balance' })
+      .expect(200);
+    expect((await StockAction.findById(rejectable._id))?.status).toBe('REJECTED');
+    const posted = await StockAction.create({
+      actionNo: 'TEST-ALLOWED-POST-REPLAY',
+      actionType: 'OPENING',
+      status: 'POSTED',
+      payload: allowed.payload,
+      requestedBy: new Types.ObjectId(),
+      approvedBy: user._id,
+      movementIds: [],
+    });
+    const replay = await request(app)
+      .post(`/api/v1/inventory/requests/${posted._id}/post`)
+      .set('Authorization', authorization)
+      .expect(201);
+    expect(replay.body.data.posting.replayed).toBe(true);
+    expect((await StockAction.findById(restricted._id))?.status).toBe('PENDING_APPROVAL');
+  });
+
   it('rolls back an identity change when its audit write fails', async () => {
     const user = await createUser('Storekeeper', 'storekeeper@example.com');
     const originalHash = user.passwordHash;
