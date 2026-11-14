@@ -29,7 +29,7 @@ project has not overridden this setting in its dashboard.
 | Branch | `staging/security-audit` |
 | Service name | A new staging name, e.g. `inventory-management-staging-backend` |
 | Root directory | Repository root |
-| Build command | `npm ci --include=dev && npm run build:shared && npm run build -w backend` |
+| Build command | `npm ci --include=dev && npm run build:shared && npm run build:staging -w backend` |
 | Start command | `npm run start:staging -w backend` |
 | Health check | `/api/v1/health` |
 | Auto-Deploy | Off |
@@ -61,6 +61,9 @@ Both `start` and `start:staging` run `check-staging-env` before opening the API.
 unless the URI hostnames match the pinned staging hosts, the Atlas host differs from
 the production host, and `MONGODB_DB_NAME` is `ims_staging`. Validation errors omit
 connection strings and credentials. The check accepts an Atlas `mongodb+srv://` URI.
+This branch's temporary staging build starts `dist-staging/staging/index.js`; the normal
+backend build starts `dist/index.js` and excludes the diagnostic module. See
+[the diagnostic boundary](staging-client-ip-diagnostic.md) before any release.
 The staging branch's `bootstrap:admin` command runs the same preflight, and its CLI
 rechecks isolation before it asks for credentials or connects to MongoDB. Use this
 command only after verifying the staging service and database identity. A Free Render

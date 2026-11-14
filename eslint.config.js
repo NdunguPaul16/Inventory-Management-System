@@ -6,7 +6,7 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'] },
+  { ignores: ['**/dist/**', '**/dist-staging/**', '**/coverage/**', '**/node_modules/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -20,7 +20,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['backend/**/*.ts', 'shared/**/*.ts', '*.js', 'frontend/vercel.mjs'],
+    files: [
+      'backend/**/*.ts',
+      'backend/scripts/*.mjs',
+      'shared/**/*.ts',
+      '*.js',
+      'frontend/vercel.mjs',
+    ],
     languageOptions: { globals: globals.node },
   },
   {

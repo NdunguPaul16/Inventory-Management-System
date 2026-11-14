@@ -4,7 +4,7 @@ services:
     runtime: node
     branch: staging/security-audit
     autoDeployTrigger: off
-    buildCommand: npm ci --include=dev && npm run build:shared && npm run build -w backend
+    buildCommand: npm ci --include=dev && npm run build:shared && npm run build:staging -w backend
     startCommand: npm run start:staging -w backend
     healthCheckPath: /api/v1/health
     envVars:

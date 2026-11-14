@@ -59,7 +59,7 @@ export class MemoryRateLimitStore implements RateLimitStore {
   }
 }
 
-function canonicalIp(value: string | undefined): string | null {
+export function canonicalIp(value: string | undefined): string | null {
   if (!value) return null;
   const ip = value.startsWith('::ffff:') ? value.slice(7) : value;
   const version = isIP(ip);

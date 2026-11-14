@@ -7,12 +7,14 @@
   "main": "./dist/index.js",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "npm run start:staging",
-    "start:staging": "node dist/cli/check-staging-env.js && node dist/index.js",
+    "build": "node scripts/clean-output.mjs dist && tsc -p tsconfig.build.json",
+    "build:staging": "node scripts/clean-output.mjs dist-staging && tsc -p tsconfig.staging.json",
+    "start": "node dist/cli/check-staging-env.js && node dist/index.js",
+    "start:staging": "node dist-staging/cli/check-staging-env.js && node dist-staging/staging/index.js",
     "bootstrap:admin": "node dist/cli/check-staging-env.js && node dist/cli/bootstrap-admin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:build-artifacts": "node scripts/verify-build-artifacts.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

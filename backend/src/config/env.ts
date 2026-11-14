@@ -60,6 +60,12 @@ export const envSchema = z
     AUTH_LOGIN_LIMIT_PER_IP_MINUTE: z.coerce.number().int().min(1).max(1_000).default(10),
     AUTH_LOGIN_LIMIT_PER_IP_HOUR: z.coerce.number().int().min(1).max(10_000).default(60),
     AUTH_LOGIN_LIMIT_PER_ACCOUNT_15_MIN: z.coerce.number().int().min(1).max(1_000).default(5),
+    /** Temporary, opt-in staging diagnostic. Expiry is an absolute UTC timestamp. */
+    STAGING_CLIENT_IP_DIAGNOSTIC_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    STAGING_CLIENT_IP_DIAGNOSTIC_EXPIRES_AT: optionalString,
     /** Comma-separated list of origins allowed by CORS. */
     CORS_ORIGINS: z
       .string()

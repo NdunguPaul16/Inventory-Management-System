@@ -6,15 +6,20 @@ describe('staging deployment configuration', () => {
     const render = readFileSync(new URL('../../render.yaml', import.meta.url), 'utf8');
     const backend = JSON.parse(
       readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-    ) as { scripts: { start: string; 'start:staging': string } };
+    ) as { scripts: { start: string; 'start:staging': string; 'build:staging': string } };
     expect(render).toContain('name: inventory-management-staging-backend');
     expect(render).toContain('branch: staging/security-audit');
     expect(render).toContain('autoDeployTrigger: off');
     expect(render).toContain('startCommand: npm run start:staging -w backend');
+    expect(render).toContain('npm run build:staging -w backend');
     expect(render).toContain('value: ims_staging');
     expect(render).not.toContain('branch: dfstock');
-    expect(backend.scripts.start).toBe('npm run start:staging');
+    expect(backend.scripts.start).toBe('node dist/cli/check-staging-env.js && node dist/index.js');
     expect(backend.scripts['start:staging']).toContain('check-staging-env.js');
+    expect(backend.scripts['start:staging']).toContain('dist-staging/staging/index.js');
+    expect(backend.scripts['build:staging']).toBe(
+      'node scripts/clean-output.mjs dist-staging && tsc -p tsconfig.staging.json',
+    );
   });
 
   it('keeps preview API requests away from the production Render origin', () => {

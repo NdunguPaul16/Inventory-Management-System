@@ -23,6 +23,8 @@ export interface AppOptions {
   loginLimiter: RequestHandler;
   rateLimitReady: () => boolean;
   trustedProxyCidrs: string[];
+  /** Staging-only routes mounted before the standard request logger. */
+  earlyRoutes?: RequestHandler;
 }
 
 const REQUEST_ID_HEADER = 'x-request-id';
@@ -30,6 +32,8 @@ const REQUEST_ID_HEADER = 'x-request-id';
 export function createApp(options: AppOptions): Express {
   const app = express();
   app.set('trust proxy', options.trustedProxyCidrs.length ? options.trustedProxyCidrs : false);
+
+  if (options.earlyRoutes) app.use(options.earlyRoutes);
 
   // Logging goes first so every later middleware (and the error handler) has req.log.
   app.use(
