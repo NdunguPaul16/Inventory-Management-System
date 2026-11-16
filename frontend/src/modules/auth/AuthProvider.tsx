@@ -5,6 +5,7 @@ import { authUserResponseSchema } from '@ims/shared';
 import { ApiRequestError, apiRequest, type ApiRequestOptions } from '../../lib/api';
 import { currentUser, login, logout, refresh } from './api/auth';
 import { AuthContext, type AuthStatus } from './auth-context';
+import { useAuthExtension } from '#auth-extension';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -98,6 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [clearSession, refreshSession],
   );
 
+  const authExtension = useAuthExtension(session, accessToken);
+
   const reloadUser = useCallback(async () => {
     const response = await authorizedRequest('/auth/me', authUserResponseSchema);
     setSession({ status: 'authenticated', user: response.data });
@@ -111,8 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: signOut,
       reloadUser,
       authorizedRequest,
+      ...authExtension,
     }),
-    [session, signIn, signOut, reloadUser, authorizedRequest],
+    [session, signIn, signOut, reloadUser, authorizedRequest, authExtension],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

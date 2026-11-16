@@ -9,12 +9,14 @@ import { RolesPage } from '../modules/roles/pages/RolesPage';
 import { AuditHistoryPage } from '../modules/audit/pages/AuditHistoryPage';
 import { AppLayout } from './AppLayout';
 import { PLACEHOLDER_ROUTES, SYSTEM_STATUS_PATH } from './navigation';
+import { stagingRoutes } from '#staging-routes';
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
   {
     element: <ProtectedRoute />,
     children: [
+      ...stagingRoutes,
       {
         path: '/',
         element: <AppLayout />,

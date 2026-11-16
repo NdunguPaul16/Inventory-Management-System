@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && node scripts/check-diagnostic-artifact.mjs auto",
+    "build:staging": "tsc -p tsconfig.json --noEmit && vite build --mode staging && node scripts/check-diagnostic-artifact.mjs staging",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

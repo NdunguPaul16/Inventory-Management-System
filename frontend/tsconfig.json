@@ -4,8 +4,13 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "types": ["vite/client", "@testing-library/jest-dom/vitest"],
+    "paths": {
+      "#staging-routes": ["./src/app/staging-routes.tsx"],
+      "#auth-extension": ["./src/modules/staging-diagnostic/auth-extension.ts"]
+    },
     "noEmit": true
   },
   "include": ["src", "test", "vite.config.ts"]

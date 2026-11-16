@@ -9,13 +9,14 @@ import { AuthProvider } from '../src/modules/auth/AuthProvider';
 export function renderRoute(path: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(routes, { initialEntries: [path] });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <RouterProvider router={router} />
       </AuthProvider>
     </QueryClientProvider>,
   );
+  return { ...view, router };
 }
 
 export function healthBody(overrides: Partial<HealthResponse['data']> = {}): HealthResponse {

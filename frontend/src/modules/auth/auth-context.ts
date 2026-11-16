@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { AuthUser, LoginInput, z } from '@ims/shared';
 import type { ApiRequestOptions } from '../../lib/api';
+import type { ClientIpDiagnosticResult } from '../staging-diagnostic/types';
 
 export type AuthStatus = 'checking' | 'authenticated' | 'anonymous';
 
@@ -15,6 +16,8 @@ export interface AuthContextValue {
     schema: T,
     options?: Omit<ApiRequestOptions, 'accessToken'>,
   ) => Promise<z.infer<T>>;
+  /** Staging-only, fixed-path request with no refresh or retry. */
+  clientIpDiagnosticOnce?: () => Promise<ClientIpDiagnosticResult>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
