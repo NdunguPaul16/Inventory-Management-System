@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build && node scripts/check-diagnostic-artifact.mjs auto",
     "build:staging": "tsc -p tsconfig.json --noEmit && vite build --mode staging && node scripts/check-diagnostic-artifact.mjs staging",
+    "typecheck:gateway": "tsc -p tsconfig.gateway.json --noEmit",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

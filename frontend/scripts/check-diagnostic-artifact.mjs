@@ -40,6 +40,14 @@ const markers = [
   'forwardedHopCount',
 ];
 const included = markers.map((marker) => contents.some((source) => source.includes(marker)));
+const serverOnlyMarkers = [
+  'ims-login-v1',
+  'x-ims-staging-login-assertion',
+  'STAGING_LOGIN_GATEWAY_KEY_CURRENT',
+];
+if (serverOnlyMarkers.some((marker) => contents.some((source) => source.includes(marker)))) {
+  throw new Error('Server-side staging login gateway leaked into the frontend artifact');
+}
 if (included.some((present) => present !== expected)) {
   throw new Error(
     expected

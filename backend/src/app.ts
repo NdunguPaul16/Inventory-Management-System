@@ -21,6 +21,7 @@ export interface AppOptions {
   corsOrigins: string[];
   auth: AuthConfig;
   loginLimiter: RequestHandler;
+  loginAdmission?: RequestHandler;
   rateLimitReady: () => boolean;
   trustedProxyCidrs: string[];
   /** Staging-only routes mounted before the standard request logger. */
@@ -60,7 +61,7 @@ export function createApp(options: AppOptions): Express {
 
   const api = Router();
   api.use('/health', healthRoutes(options.environment, options.rateLimitReady));
-  api.use('/auth', authRoutes(options.auth, options.loginLimiter));
+  api.use('/auth', authRoutes(options.auth, options.loginLimiter, options.loginAdmission));
   api.use('/users', userRoutes);
   api.use('/roles', roleRoutes);
   api.use('/audit-logs', auditRoutes);

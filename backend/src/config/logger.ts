@@ -1,15 +1,30 @@
-import { pino, type Logger, type LoggerOptions } from 'pino';
+import { pino, type DestinationStream, type Logger, type LoggerOptions } from 'pino';
 import type { Env } from './env.js';
 
 export type { Logger };
 
 /** Structured JSON logs (spec §18), pretty-printed in development. */
-export function createLogger(env: Pick<Env, 'NODE_ENV' | 'LOG_LEVEL'>): Logger {
+export function createLogger(
+  env: Pick<Env, 'NODE_ENV' | 'LOG_LEVEL'>,
+  destination?: DestinationStream,
+): Logger {
   const options: LoggerOptions = {
     level: env.LOG_LEVEL,
     base: { service: 'ims-server' },
     redact: {
-      paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.headers.x-ims-staging-login-assertion',
+        'req.headers.forwarded',
+        'req.headers.x-forwarded-for',
+        'req.headers.x-real-ip',
+        'req.headers.x-vercel-forwarded-for',
+        'req.headers.cf-connecting-ip',
+        'req.remoteAddress',
+        'req.remotePort',
+        'res.headers["set-cookie"]',
+      ],
       censor: '[redacted]',
     },
   };
@@ -19,5 +34,5 @@ export function createLogger(env: Pick<Env, 'NODE_ENV' | 'LOG_LEVEL'>): Logger {
       options: { colorize: true, translateTime: 'SYS:HH:MM:ss.l', ignore: 'pid,hostname,service' },
     };
   }
-  return pino(options);
+  return destination ? pino(options, destination) : pino(options);
 }

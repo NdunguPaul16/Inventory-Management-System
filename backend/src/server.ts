@@ -1,12 +1,16 @@
 import { createApp } from './app.js';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { appInfo } from './config/app-info.js';
 import { connectDbWithRetry, disconnectDb } from './config/db.js';
 import { EnvValidationError, loadEnvFile, parseEnv } from './config/env.js';
 import { createLogger } from './config/logger.js';
 import { migrateLegacyAuditLog } from './modules/audit/migrate.js';
 import { seedDefaultRoles } from './modules/roles/service.js';
-import { loginRateLimiter, MemoryRateLimitStore } from './modules/auth/rate-limit.js';
+import {
+  loginRateLimiter,
+  MemoryRateLimitStore,
+  type RateLimitStore,
+} from './modules/auth/rate-limit.js';
 import { createRedisRateLimitStore } from './modules/auth/redis-rate-limit-store.js';
 import type { Logger } from './config/logger.js';
 import type { AuthConfig } from './modules/auth/service.js';
@@ -15,13 +19,23 @@ export interface EarlyRoutesContext {
   logger: Logger;
   auth: AuthConfig;
   source: NodeJS.ProcessEnv;
+  rateLimitStore: RateLimitStore;
+}
+
+export interface ServerExtensions {
+  earlyRoutes?: RequestHandler;
+  loginAdmission?: RequestHandler;
+  loginClientIdentity?: (req: Request, res: Response) => string | null;
 }
 
 async function main(
-  createEarlyRoutes?: (context: EarlyRoutesContext) => RequestHandler,
+  createExtensions?: (context: EarlyRoutesContext) => ServerExtensions,
 ): Promise<void> {
   loadEnvFile();
   const env = parseEnv(process.env);
+  if (env.NODE_ENV === 'production' && env.MONGODB_DB_NAME === 'ims_staging' && !createExtensions) {
+    throw new Error('Staging ingress build is required');
+  }
   const logger = createLogger(env);
   let redisStore: ReturnType<typeof createRedisRateLimitStore> | undefined;
   if (env.AUTH_RATE_LIMIT_REDIS_URL) {
@@ -33,9 +47,22 @@ async function main(
       throw new Error('Authentication rate-limit store connection failed');
     }
   }
+  const rateLimitStore = redisStore ?? new MemoryRateLimitStore();
+  const auth: AuthConfig = {
+    accessTokenSecret: env.AUTH_ACCESS_TOKEN_SECRET,
+    refreshTokenSecret: env.AUTH_REFRESH_TOKEN_SECRET,
+    secureCookies: env.NODE_ENV === 'production',
+  };
+  const extensions = createExtensions?.({
+    logger,
+    auth,
+    source: process.env,
+    rateLimitStore,
+  });
   const loginLimiter = loginRateLimiter({
-    store: redisStore ?? new MemoryRateLimitStore(),
+    store: rateLimitStore,
     keySecret: env.AUTH_ACCESS_TOKEN_SECRET,
+    clientIdentity: extensions?.loginClientIdentity,
     policy: {
       perIpMinute: env.AUTH_LOGIN_LIMIT_PER_IP_MINUTE,
       perIpHour: env.AUTH_LOGIN_LIMIT_PER_IP_HOUR,
@@ -56,17 +83,13 @@ async function main(
     stopInMemoryDb = () => replSet.stop();
   }
 
-  const auth: AuthConfig = {
-    accessTokenSecret: env.AUTH_ACCESS_TOKEN_SECRET,
-    refreshTokenSecret: env.AUTH_REFRESH_TOKEN_SECRET,
-    secureCookies: env.NODE_ENV === 'production',
-  };
   const app = createApp({
     logger,
     environment: env.NODE_ENV,
     corsOrigins: env.CORS_ORIGINS,
     trustedProxyCidrs: env.AUTH_TRUSTED_PROXY_CIDRS,
-    earlyRoutes: createEarlyRoutes?.({ logger, auth, source: process.env }),
+    earlyRoutes: extensions?.earlyRoutes,
+    loginAdmission: extensions?.loginAdmission,
     loginLimiter,
     rateLimitReady: () => redisStore?.isReady() ?? true,
     auth,
@@ -106,9 +129,9 @@ async function main(
 }
 
 export function runServer(
-  createEarlyRoutes?: (context: EarlyRoutesContext) => RequestHandler,
+  createExtensions?: (context: EarlyRoutesContext) => ServerExtensions,
 ): void {
-  main(createEarlyRoutes).catch((err: unknown) => {
+  main(createExtensions).catch((err: unknown) => {
     // The logger may not exist yet (e.g. invalid env), so fall back to stderr.
     const message = err instanceof EnvValidationError ? err.message : err;
     // eslint-disable-next-line no-console

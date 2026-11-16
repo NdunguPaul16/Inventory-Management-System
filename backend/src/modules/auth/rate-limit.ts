@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import type { LoginInput } from '@ims/shared';
 
 export interface RateBucket {
@@ -77,10 +77,14 @@ export function loginRateLimiter(options: {
   store: RateLimitStore;
   keySecret: string;
   policy: LoginRatePolicy;
+  /** Optional verified identity supplied by a deployment-specific ingress. */
+  clientIdentity?: (req: Request, res: Response) => string | null;
 }): RequestHandler {
   return async (req, res, next) => {
-    const ip = canonicalIp(req.ip);
-    if (!ip) {
+    const identity = options.clientIdentity
+      ? options.clientIdentity(req, res)
+      : canonicalIp(req.ip);
+    if (!identity) {
       res.status(503).json({
         error: { code: 'SERVICE_UNAVAILABLE', message: 'Sign-in is temporarily unavailable' },
       });
@@ -88,7 +92,7 @@ export function loginRateLimiter(options: {
     }
     const input = res.locals.validated?.body as LoginInput | undefined;
     if (!input) return next(new Error('Login validation must run before rate limiting'));
-    const ipKey = key(options.keySecret, 'ip', ip);
+    const ipKey = key(options.keySecret, 'ip', identity);
     const accountKey = key(options.keySecret, 'account', input.email);
     try {
       const decision = await options.store.consume([

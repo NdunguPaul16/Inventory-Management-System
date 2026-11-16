@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "npm ci --include=dev --prefix ..",
-  "buildCommand": "npm run build:shared --prefix .. && npm run build",
+  "buildCommand": "node scripts/check-login-gateway-context.mjs && npm run build:shared --prefix .. && npm run build && npm run typecheck:gateway",
   "outputDirectory": "dist",
   "git": {
     "deploymentEnabled": { "staging/security-audit": false }

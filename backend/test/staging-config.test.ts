@@ -13,6 +13,7 @@ describe('staging deployment configuration', () => {
     expect(render).toContain('startCommand: npm run start:staging -w backend');
     expect(render).toContain('npm run build:staging -w backend');
     expect(render).toContain('value: ims_staging');
+    expect(render).toContain('key: STAGING_LOGIN_GATEWAY_KEY_CURRENT');
     expect(render).not.toContain('branch: dfstock');
     expect(backend.scripts.start).toBe('node dist/cli/check-staging-env.js && node dist/index.js');
     expect(backend.scripts['start:staging']).toContain('check-staging-env.js');
@@ -36,7 +37,9 @@ describe('staging deployment configuration', () => {
     };
     expect(vercel.framework).toBe('vite');
     expect(vercel.installCommand).toBe('npm ci --include=dev --prefix ..');
-    expect(vercel.buildCommand).toBe('npm run build:shared --prefix .. && npm run build');
+    expect(vercel.buildCommand).toBe(
+      'node scripts/check-login-gateway-context.mjs && npm run build:shared --prefix .. && npm run build && npm run typecheck:gateway',
+    );
     expect(vercel.outputDirectory).toBe('dist');
     expect(vercel.routes).toBeUndefined();
     expect(vercel.git.deploymentEnabled).toEqual({ 'staging/security-audit': false });
