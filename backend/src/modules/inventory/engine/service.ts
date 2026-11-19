@@ -294,6 +294,34 @@ async function validateContext(
   return item;
 }
 
+/** Serialize the first stock use with master-data identity or status edits.
+ * Later postings do not write these documents, so normal FIFO throughput is unaffected.
+ */
+async function lockFirstStockUse(
+  itemId: Types.ObjectId,
+  locationId: Types.ObjectId,
+  session: ClientSession,
+) {
+  if (!(await StockMovement.exists({ itemId }).session(session))) {
+    const result = await Item.updateOne(
+      { _id: itemId, isActive: true },
+      { $inc: { __v: 1 } },
+      { session },
+    );
+    if (result.matchedCount !== 1)
+      throw AppError.conflict('Item changed before its first stock posting');
+  }
+  if (!(await StockMovement.exists({ locationId }).session(session))) {
+    const result = await Location.updateOne(
+      { _id: locationId, isActive: true },
+      { $inc: { __v: 1 } },
+      { session },
+    );
+    if (result.matchedCount !== 1)
+      throw AppError.conflict('Location changed before its first stock posting');
+  }
+}
+
 function serialList(
   itemTracksSerial: boolean,
   quantity: Decimal,
@@ -353,6 +381,7 @@ async function createInbound(
   if (!Number.isFinite(receivedAt.getTime()))
     throw AppError.badRequest('receivedAt must be a valid date');
   const item = await validateContext(itemId, locationId, session);
+  await lockFirstStockUse(itemId, locationId, session);
   const serialNumbers = serialList(item.trackSerial, quantity, input.serialNumbers);
   const balance = await lockBalance(itemId, locationId, session);
   const postedAt = new Date();

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import type { Types } from 'mongoose';
 import request from 'supertest';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -284,6 +285,80 @@ describe('inventory item and location management', () => {
     expect(
       (await StockBalance.findOne({ itemId: item._id, locationId: location._id }))?.value,
     ).toBe(125);
+  });
+
+  it('prevents a stale first-use deactivation from committing alongside stock', async () => {
+    const item = await Item.create({
+      sku: 'FIRST-USE',
+      name: 'First use',
+      type: 'TRADING_GOOD',
+      baseUnit: 'PCS',
+    });
+    const location = await Location.create({
+      code: 'FIRST-WH',
+      name: 'First warehouse',
+      type: 'WAREHOUSE',
+    });
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+      const stale = await Item.findById(item._id).session(session);
+      expect(stale).not.toBeNull();
+      expect(await StockMovement.exists({ itemId: item._id }).session(session)).toBeNull();
+      await postIn({
+        itemId: item._id,
+        locationId: location._id,
+        quantity: '1',
+        unitCost: 50,
+        movementType: 'OPENING',
+        sourceDoc: { type: 'TEST', id: randomUUID(), number: 'FIRST-1' },
+        postedBy: adminId,
+        idempotencyKey: randomUUID(),
+      });
+      if (!stale) throw new Error('Item missing');
+      stale.isActive = false;
+      await expect(stale.save({ session })).rejects.toThrow();
+      await session.abortTransaction();
+      expect((await Item.findById(item._id))?.isActive).toBe(true);
+      expect(await StockMovement.countDocuments({ itemId: item._id })).toBe(1);
+    } finally {
+      if (session.inTransaction()) await session.abortTransaction();
+      await session.endSession();
+    }
+  });
+
+  it('rolls back a first inbound posting when its item lifecycle lock cannot be acquired', async () => {
+    const item = await Item.create({
+      sku: 'LOCK-FAIL',
+      name: 'Lock failure',
+      type: 'TRADING_GOOD',
+      baseUnit: 'PCS',
+    });
+    const location = await Location.create({
+      code: 'LOCK-WH',
+      name: 'Lock warehouse',
+      type: 'WAREHOUSE',
+    });
+    const lockFailure = vi
+      .spyOn(Item, 'updateOne')
+      .mockResolvedValueOnce({ matchedCount: 0 } as never);
+    try {
+      await expect(
+        postIn({
+          itemId: item._id,
+          locationId: location._id,
+          quantity: '1',
+          unitCost: 50,
+          movementType: 'OPENING',
+          sourceDoc: { type: 'TEST', id: randomUUID(), number: 'LOCK-1' },
+          postedBy: adminId,
+          idempotencyKey: randomUUID(),
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+    } finally {
+      lockFailure.mockRestore();
+    }
+    expect(await StockMovement.countDocuments({ itemId: item._id })).toBe(0);
   });
 
   it('rolls back item creation when its audit record fails', async () => {

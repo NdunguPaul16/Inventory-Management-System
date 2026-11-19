@@ -31,9 +31,11 @@ results do not establish deployed behavior or representative-volume performance.
 1. Review the local item and location management prerequisite before staging.
    It provides permission-gated create, list, search, edit and status routes,
    matching screens, and transactional audit records. Stocked identities cannot
-   be changed or deactivated. Confirm the seeded role permissions after rollout
-   and create only disposable staging master data with separate approval. The
-   broader Phase 1 item fields, categories and unit conversions remain pending.
+   be changed or deactivated. The first inbound posting serializes with an
+   overlapping identity or status edit. Confirm the seeded role permissions
+   after rollout and create only disposable staging master data with separate
+   approval. The broader Phase 1 item fields, categories and unit conversions
+   remain pending.
 2. Preserve the decided stock approval policy: every adjustment and count
    variance needs a **different Manager or Admin** approver, regardless of
    amount. No stock-specific threshold changes approval authority. The broader
