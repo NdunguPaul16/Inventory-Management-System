@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Card, PageHeader } from '../../../components/Card';
 import { formatDateTime } from '../../../lib/format';
@@ -12,31 +12,27 @@ export function StockBalancesPage() {
   const { authorizedRequest } = useAuth();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [location, setLocation] = useState('all');
+  const [locationCodeInput, setLocationCodeInput] = useState('');
+  const [locationCode, setLocationCode] = useState('');
   const [cursors, setCursors] = useState<string[]>([]);
   const before = cursors.at(-1);
   const balances = useQuery({
-    queryKey: ['inventory', 'balances', search, location, before],
+    queryKey: ['inventory', 'balances', search, locationCode, before],
     queryFn: ({ signal }) =>
       getBalances(authorizedRequest, signal, {
         q: search,
-        ...(location === 'all' ? {} : { locationId: location }),
+        locationCode,
         before,
       }),
     retry: false,
   });
 
-  const locations = useMemo(() => {
-    const unique = new Map(
-      (balances.data ?? []).map((balance) => [balance.locationId._id, balance.locationId] as const),
-    );
-    return [...unique.values()].sort((a, b) => a.code.localeCompare(b.code));
-  }, [balances.data]);
   const visible = balances.data ?? [];
   const totalValue = visible.reduce((sum, balance) => sum + balance.value, 0);
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSearch(searchInput.trim());
+    setLocationCode(locationCodeInput.trim().toUpperCase());
     setCursors([]);
   }
 
@@ -66,27 +62,20 @@ export function StockBalancesPage() {
           </div>
           <div>
             <label
-              htmlFor="balance-location"
+              htmlFor="balance-location-code"
               className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500"
             >
-              Location
+              Location code
             </label>
-            <select
-              id="balance-location"
-              value={location}
-              onChange={(event) => {
-                setLocation(event.target.value);
-                setCursors([]);
-              }}
+            <input
+              id="balance-location-code"
+              type="text"
+              value={locationCodeInput}
+              onChange={(event) => setLocationCodeInput(event.target.value)}
+              placeholder="Exact code, or leave blank"
+              maxLength={80}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-            >
-              <option value="all">All locations</option>
-              {locations.map((item) => (
-                <option key={item._id} value={item._id}>
-                  {item.code} — {item.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <button
             type="submit"

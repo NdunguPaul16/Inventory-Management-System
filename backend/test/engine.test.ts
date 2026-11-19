@@ -489,6 +489,18 @@ describe('FIFO stock engine', () => {
     expect(await listStockBalances({ q: 'no such item' })).toEqual([]);
     expect(await listStockBalances({ q: 'Source' })).toHaveLength(1);
     expect(await listStockBalances({ q: 'Test inventory' })).toHaveLength(2);
+    const destinationCode = (await Location.findById(destinationLocationId).lean())?.code;
+    expect(destinationCode).toBeDefined();
+    expect(await listStockBalances({ locationCode: destinationCode!.toLowerCase() })).toHaveLength(
+      1,
+    );
+    expect(await listStockBalances({ locationCode: 'NO-SUCH-LOCATION' })).toEqual([]);
+    expect(
+      await listStockBalances({
+        locationCode: destinationCode,
+        locationId: String(sourceLocationId),
+      }),
+    ).toEqual([]);
     expect(
       await listStockBalances({ locationId: String(sourceLocationId), limit: 1 }),
     ).toHaveLength(1);

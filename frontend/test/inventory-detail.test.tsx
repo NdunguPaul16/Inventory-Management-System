@@ -5,22 +5,29 @@ import { healthBody, jsonResponse, renderRoute, sessionBody, testUser } from './
 
 const ITEM_ID = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 const LOCATION_ID = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+const SECOND_LOCATION_ID = 'eeeeeeeeeeeeeeeeeeeeeeee';
 const ITEM_URL = `/inventory/items/${ITEM_ID}/stock?locationId=${LOCATION_ID}`;
 const BALANCES_PATH = `/api/v1/inventory/balances?limit=20&itemId=${ITEM_ID}`;
 const LAYERS_PATH = `/api/v1/inventory/items/${ITEM_ID}/layers?locationId=${LOCATION_ID}&limit=50`;
 const MOVEMENTS_PATH = `/api/v1/inventory/items/${ITEM_ID}/movements?locationId=${LOCATION_ID}&limit=50`;
 
-function mockDetailApi(permissions: string[], firstMovementPageSize = 1, firstLayerPageSize = 2) {
+function mockDetailApi(
+  permissions: string[],
+  firstMovementPageSize = 1,
+  firstLayerPageSize = 2,
+  firstBalancePageSize = 1,
+) {
   const user = testUser(permissions);
   const fetchMock = vi.fn(async (url: string) => {
     if (url === '/api/v1/auth/refresh') return jsonResponse(200, sessionBody(user));
     if (url === '/api/v1/auth/me') return jsonResponse(200, { data: user, meta: {} });
     if (url === '/api/v1/health') return jsonResponse(200, healthBody());
-    if (url === BALANCES_PATH)
+    if (url.startsWith(BALANCES_PATH))
       return jsonResponse(200, {
-        data: [
-          {
-            _id: 'cccccccccccccccccccccccc',
+        data: Array.from(
+          { length: url === BALANCES_PATH ? firstBalancePageSize : 1 },
+          (_, index) => ({
+            _id: String(url === BALANCES_PATH ? index + 1 : 21).padStart(24, '0'),
             itemId: {
               _id: ITEM_ID,
               sku: 'CUE-001',
@@ -28,16 +35,26 @@ function mockDetailApi(permissions: string[], firstMovementPageSize = 1, firstLa
               type: 'TRADING_GOOD',
               baseUnit: 'PCS',
             },
-            locationId: { _id: LOCATION_ID, code: 'WH', name: 'Warehouse', type: 'WAREHOUSE' },
+            locationId: {
+              _id:
+                url === BALANCES_PATH && index === 0
+                  ? LOCATION_ID
+                  : url === BALANCES_PATH
+                    ? String(index + 1).padStart(24, '0')
+                    : SECOND_LOCATION_ID,
+              code: url === BALANCES_PATH ? `WH-${index + 1}` : 'WH-21',
+              name: url === BALANCES_PATH ? `Warehouse ${index + 1}` : 'Warehouse 21',
+              type: 'WAREHOUSE',
+            },
             onHand: { $numberDecimal: '2.5' },
             reserved: { $numberDecimal: '0' },
             value: 12_500,
             version: 1,
-          },
-        ],
+          }),
+        ),
         meta: {},
       });
-    if (url.startsWith(LAYERS_PATH))
+    if (url.startsWith(`/api/v1/inventory/items/${ITEM_ID}/layers?`))
       return jsonResponse(200, {
         data: Array.from({ length: url === LAYERS_PATH ? firstLayerPageSize : 1 }, (_, index) => ({
           _id: String(url === LAYERS_PATH ? index + 1 : 51).padStart(24, '0'),
@@ -141,6 +158,24 @@ describe('item stock detail', () => {
     expect(
       fetchMock.mock.calls.some(
         ([url]) => url === `${LAYERS_PATH}&before=${String(50).padStart(24, '0')}`,
+      ),
+    ).toBe(true);
+  });
+
+  it('offers later stock locations while viewing FIFO layers', async () => {
+    const fetchMock = mockDetailApi(['inventory.balances.read', 'inventory.layers.read'], 1, 2, 20);
+    renderRoute(ITEM_URL);
+    await screen.findByRole('heading', { name: /CUE-001.*Pool cue/ });
+    await userEvent.click(screen.getByRole('tab', { name: 'FIFO layers' }));
+    await screen.findByText('TEST-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Load more locations' }));
+    expect(await screen.findByRole('option', { name: 'WH-21 — Warehouse 21' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Location'), SECOND_LOCATION_ID);
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        url.startsWith(
+          `/api/v1/inventory/items/${ITEM_ID}/layers?locationId=${SECOND_LOCATION_ID}`,
+        ),
       ),
     ).toBe(true);
   });

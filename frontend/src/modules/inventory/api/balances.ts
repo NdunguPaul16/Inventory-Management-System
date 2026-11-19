@@ -36,6 +36,7 @@ export async function getBalances(
   options: {
     itemId?: string;
     locationId?: string;
+    locationCode?: string;
     q?: string;
     before?: string;
     limit?: number;
@@ -44,6 +45,7 @@ export async function getBalances(
   const params = new URLSearchParams({ limit: String(options.limit ?? BALANCE_PAGE_SIZE) });
   if (options.itemId) params.set('itemId', options.itemId);
   if (options.locationId) params.set('locationId', options.locationId);
+  if (options.locationCode) params.set('locationCode', options.locationCode);
   if (options.q) params.set('q', options.q);
   if (options.before) params.set('before', options.before);
   const path = `/inventory/balances?${params}`;

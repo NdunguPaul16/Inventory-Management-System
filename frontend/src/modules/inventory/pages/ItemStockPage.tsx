@@ -171,6 +171,16 @@ export function ItemStockPage() {
                     </option>
                   ))}
                 </select>
+                {balances.hasNextPage && (
+                  <button
+                    type="button"
+                    onClick={() => void balances.fetchNextPage()}
+                    disabled={balances.isFetchingNextPage}
+                    className="ml-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                  >
+                    {balances.isFetchingNextPage ? 'Loading…' : 'Load more locations'}
+                  </button>
+                )}
               </div>
             )}
           </div>

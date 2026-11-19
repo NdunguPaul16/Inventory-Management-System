@@ -55,15 +55,19 @@ function mockBalancesApi(
     if (url.startsWith('/api/v1/inventory/balances?')) {
       const params = new URL(url, 'https://local.test').searchParams;
       const term = params.get('q')?.toLowerCase() ?? '';
-      const locationId = params.get('locationId');
-      const pageRecords = pages ? (pages[params.has('before') ? 1 : 0] ?? []) : records;
+      const locationCode = params.get('locationCode');
+      const pageRecords = locationCode
+        ? records
+        : pages
+          ? (pages[params.has('before') ? 1 : 0] ?? [])
+          : records;
       const filtered = pageRecords.filter(
         (record) =>
           (!term ||
             `${record.itemId.sku} ${record.itemId.name} ${record.locationId.code} ${record.locationId.name}`
               .toLowerCase()
               .includes(term)) &&
-          (!locationId || record.locationId._id === locationId),
+          (!locationCode || record.locationId.code === locationCode),
       );
       return balanceStatus === 200
         ? jsonResponse(200, { data: filtered, meta: {} })
@@ -90,12 +94,11 @@ describe('stock balances page', () => {
     expect(screen.queryByText('BALL-002')).not.toBeInTheDocument();
     await userEvent.clear(screen.getByRole('searchbox', { name: 'Search stock' }));
     await userEvent.click(screen.getByRole('button', { name: 'Search all balances' }));
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Location' }), LOCATION_B);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Location code' }), 'shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Search all balances' }));
     expect(screen.queryByText('CUE-001')).not.toBeInTheDocument();
     expect(screen.getByText('BALL-002')).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([url]) => url.includes('locationId=' + LOCATION_B))).toBe(
-      true,
-    );
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('locationCode=SHOP'))).toBe(true);
   });
 
   it('does not request balances for a user without permission', async () => {
@@ -127,5 +130,21 @@ describe('stock balances page', () => {
     expect(
       fetchMock.mock.calls.some(([url]) => url.includes(`before=${firstPage.at(-1)!._id}`)),
     ).toBe(true);
+  });
+
+  it('filters by a location absent from the initial balance page', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      ...records[0]!,
+      _id: String(100 + index).padStart(24, '0'),
+      itemId: { ...records[0]!.itemId, sku: `CUE-${index}` },
+    }));
+    const fetchMock = mockBalancesApi(['inventory.balances.read'], 200, [firstPage, [records[1]!]]);
+    renderRoute('/inventory/balances');
+    expect(await screen.findByText('CUE-0')).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Location code' }), 'shop');
+    await userEvent.click(screen.getByRole('button', { name: 'Search all balances' }));
+    expect(await screen.findByText('BALL-002')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('locationCode=SHOP'))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('&before='))).toBe(false);
   });
 });

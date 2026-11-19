@@ -1062,6 +1062,7 @@ export async function listStockBalances(
   options: {
     itemId?: string;
     locationId?: string;
+    locationCode?: string;
     q?: string;
     before?: string;
     limit?: number;
@@ -1070,6 +1071,13 @@ export async function listStockBalances(
   const filter: Record<string, unknown> = {};
   if (options.itemId) filter.itemId = objectId(options.itemId, 'itemId');
   if (options.locationId) filter.locationId = objectId(options.locationId, 'locationId');
+  if (options.locationCode) {
+    const location = await Location.findOne({ code: options.locationCode.toUpperCase() })
+      .select('_id')
+      .lean();
+    if (!location || (options.locationId && String(location._id) !== options.locationId)) return [];
+    filter.locationId = location._id;
+  }
   if (options.before) filter._id = { $lt: objectId(options.before, 'before') };
   if (options.q) {
     const escaped = options.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

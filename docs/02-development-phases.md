@@ -137,8 +137,8 @@ transfer and reversal tests cover value conservation; a full valuation report
 and late landed-cost effects remain later-phase work.
 The backend now enforces a per-file 90% line-coverage gate for the FIFO engine
 through `npm run test:engine:coverage -w backend`. The latest local result is
-90.72% engine lines and 90.21% for `service.ts` (107 backend tests); branch coverage
-is 79.4%, so this does not establish comprehensive branch coverage. A serial
+91.35% engine lines and 90.9% for `service.ts` (116 backend tests); branch coverage
+is 81.45%, so this does not establish comprehensive branch coverage. A serial
 receipt regression test also exposed and corrected a Mongoose transaction
 option required when creating multiple serial records. These changes have not
 been merged or validated on staging.
@@ -156,11 +156,14 @@ nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
 and nightly-operation gates.
 Nightly scheduling, alert delivery and a representative-volume run remain
 deployment tasks. No reconciliation result automatically changes stock.
-The complete local suite currently passes 197 tests across shared, backend and
+The complete local suite currently passes 199 tests across shared, backend and
 frontend; this is not staging acceptance evidence.
 The FIFO layer API and item detail now page layers in receipt order, with a
 bounded query and an explicit load-more action. Representative-volume staging
 validation remains pending.
+The item detail also loads later stock locations from its FIFO tab. The balance
+screen resolves an exact location code on the backend, so its filter can reach
+locations absent from the first balance page.
 Stock action approval, rejection and posting now check the caller's operation
 permission before request lookup, and filter request types by that permission.
 The API also requires an active system Admin or Owner / Manager role before

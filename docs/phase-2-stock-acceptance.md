@@ -49,7 +49,9 @@ results do not establish deployed behavior or representative-volume performance.
    expected operation, not a guessed test fixture.
 6. Review the local stock-balance cursor pagination and server-side search with
    representative data before staging acceptance. The balances page requests
-   one page at a time; item detail loads additional locations on demand.
+   one page at a time and resolves an exact location-code filter independently
+   of the current page; item detail loads additional locations on demand from
+   its stock and FIFO tabs.
 7. Review FIFO layer pagination with representative data. The item detail page
    requests 50 layers at a time in receipt order, using the last layer ID as its
    cursor; staging performance and completeness remain unverified.
