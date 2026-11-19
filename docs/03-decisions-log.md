@@ -19,6 +19,7 @@ that depends on them.
 | D9 | FIFO layers persist remaining value in whole cents | 2026-11-04 | Transfers and reversals carry the original movement slice's recorded total cost; fractional quantities cannot add value through a second rounding. |
 | D10 | `audit_logs` is the single audit collection | 2026-11-04 | Stock, user, role, approval and authentication state changes use it; legacy `audit_log` entries are migrated at startup. |
 | D11 | A stock count freezes a book snapshot, not warehouse operations | 2026-11-18 | A later balance version invalidates the count; count variances require a separate approver and post through FIFO. Serial counts also freeze the book serial set; missing and found serials post together atomically. |
+| D12 | Stock value thresholds never remove separate approval | 2026-11-19 | Every adjustment and count variance requires a different authorised approver. A future configurable threshold may escalate approval authority above value Y but never permits automatic posting below it. |
 
 ## Open (with working assumptions)
 

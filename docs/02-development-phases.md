@@ -136,7 +136,7 @@ transfer and reversal tests cover value conservation; a full valuation report
 and late landed-cost effects remain later-phase work.
 The backend now enforces a per-file 90% line-coverage gate for the FIFO engine
 through `npm run test:engine:coverage -w backend`. The latest local result is
-90.72% engine lines and 90.21% for `service.ts` (101 backend tests); branch coverage
+90.72% engine lines and 90.21% for `service.ts` (102 backend tests); branch coverage
 is 79.4%, so this does not establish comprehensive branch coverage. A serial
 receipt regression test also exposed and corrected a Mongoose transaction
 option required when creating multiple serial records. These changes have not
@@ -147,10 +147,13 @@ MongoDB snapshot, including when another posting commits during the check.
 An in-memory MongoDB regression crosses cursor batches and detects a one-cent
 drift in the final movement.
 An authorised inventory page runs the check only when requested; a read-only
-job command reports counts and exits nonzero when differences exist.
+job command reports counts and exits nonzero when differences exist. An
+in-memory replica-set test executes the compiled job for both a clean ledger
+and a one-cent drift, confirming its exit codes and that it writes no stock or
+audit records.
 Nightly scheduling, alert delivery and a representative-volume run remain
 deployment tasks. No reconciliation result automatically changes stock.
-The complete local suite currently passes 171 tests across shared, backend and
+The complete local suite currently passes 172 tests across shared, backend and
 frontend; this is not staging acceptance evidence.
 Stock action approval, rejection and posting now check the caller's operation
 permission before request lookup, and filter request types by that permission.
@@ -163,7 +166,7 @@ Backend:
 - [x] Negative-stock guard; idempotency keys on posting endpoints (local)
 - [x] **Opening stock** import (CSV/Excel → validated → posted as `OPENING` layers) (local)
 - [x] Stock adjustment request → separate approval → posting workflow (local)
-- [ ] Configurable adjustment and count-variance value thresholds (§12; Phase 1 settings prerequisite)
+- [ ] Configurable adjustment and count-variance value thresholds (§12; Phase 1 settings prerequisite; separate approval remains mandatory at every value)
 - [x] Stock transfers between locations (FIFO layers preserved) (local)
 - [x] Stock counts: freeze → count entry → variance review → post `COUNT_VARIANCE` (local)
 - [x] Read-only reconciliation command and permission-gated endpoint (§5.4) (local)

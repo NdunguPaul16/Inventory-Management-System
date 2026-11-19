@@ -530,6 +530,8 @@ from code and refreshed at startup; custom roles can be created separately.
 - PO above amount X → Manager approval.
 - Any stock adjustment / count variance above value Y → Manager approval. Until
   the threshold setting is available, every adjustment requires approval.
+- At or below Y, a different authorised user must still approve the adjustment
+  or count variance. A threshold never authorises automatic posting.
 - Opening stock and stock reversals require an approved request before posting.
 - Price override beyond Z% discount or below cost → Manager approval.
 - Invoice cancellation (credit note) → Manager approval.
