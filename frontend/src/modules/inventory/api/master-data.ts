@@ -1,4 +1,11 @@
-import { apiSuccessSchema, ITEM_TYPES, LOCATION_TYPES, objectIdSchema, z } from '@ims/shared';
+import {
+  apiSuccessSchema,
+  ITEM_TYPES,
+  LOCATION_TYPES,
+  objectIdSchema,
+  unitConversionSchema,
+  z,
+} from '@ims/shared';
 import type {
   CreateItemInput,
   CreateLocationInput,
@@ -15,6 +22,11 @@ export const itemRecordSchema = z.object({
   name: z.string(),
   type: z.enum(ITEM_TYPES),
   baseUnit: z.string(),
+  description: z.string().default(''),
+  unitConversions: z.array(unitConversionSchema).default([]),
+  reorderLevel: z.string().nullable().default(null),
+  reorderQty: z.string().nullable().default(null),
+  leadTimeDays: z.number().int().nullable().default(null),
   trackSerial: z.boolean(),
   trackBatch: z.boolean(),
   isActive: z.boolean(),

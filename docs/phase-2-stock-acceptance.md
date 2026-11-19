@@ -34,8 +34,9 @@ results do not establish deployed behavior or representative-volume performance.
    be changed or deactivated. The first inbound posting serializes with an
    overlapping identity or status edit. Confirm the seeded role permissions
    after rollout and create only disposable staging master data with separate
-   approval. The broader Phase 1 item fields, categories and unit conversions
-   remain pending.
+   approval. Item-level conversion definitions and replenishment fields are
+   available locally, but posting still requires base-unit quantities. The
+   broader Phase 1 item fields, categories and unit catalog remain pending.
 2. Preserve the decided stock approval policy: every adjustment and count
    variance needs a **different Manager or Admin** approver, regardless of
    amount. No stock-specific threshold changes approval authority. The broader

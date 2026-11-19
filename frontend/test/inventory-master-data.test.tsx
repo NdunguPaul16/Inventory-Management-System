@@ -69,6 +69,42 @@ describe('inventory master data pages', () => {
     );
   });
 
+  it('submits a base-unit conversion and replenishment fields from the item form', async () => {
+    const calls = mockMasterData(['*']);
+    renderRoute('/inventory/items');
+    await screen.findByText('CUE-01');
+    await userEvent.click(screen.getByRole('button', { name: 'Create item' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'SKU' }), 'roll-01');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Cloth roll');
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Base unit' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Base unit' }), 'm');
+    await userEvent.click(screen.getByRole('button', { name: 'Add unit conversion' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Conversion unit 1' }), 'roll');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Base quantity 1' }), '25');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Reorder level (base units)' }), '10');
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Reorder quantity (base units)' }),
+      '25',
+    );
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Lead time (days)' }), '14');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Item saved');
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        url: '/api/v1/inventory/items',
+        method: 'POST',
+        body: expect.objectContaining({
+          sku: 'ROLL-01',
+          baseUnit: 'M',
+          unitConversions: [{ unit: 'ROLL', baseQuantity: '25' }],
+          reorderLevel: '10',
+          reorderQty: '25',
+          leadTimeDays: 14,
+        }),
+      }),
+    );
+  });
+
   it('allows a reader to view locations but hides edits and denies an unrelated user', async () => {
     const calls = mockMasterData(['inventory.locations.read']);
     renderRoute('/inventory/locations');

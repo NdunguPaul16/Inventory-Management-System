@@ -72,8 +72,8 @@ Backend:
 - [x] RBAC middleware with permission-gated routes (existing local API)
 - [ ] Audit log service exists and sensitive writes use it; general audit middleware and the staging Audit History work have not been integrated into this branch (§17)
 - [ ] Settings: company profile, logo, numbering formats, approval thresholds, base currency
-- [ ] Master data CRUD: operational location CRUD is implemented locally; categories, units + conversions, currencies and exchange rates, tax categories, payment methods, customer groups remain pending
-- [ ] Items CRUD with all fields in §4.2: operational item CRUD, type and serial/batch tracking are implemented locally; the remaining specification fields, including KRA placeholders, remain pending
+- [ ] Master data CRUD: operational location CRUD and item-level unit conversions are implemented locally; categories, a unit catalog, currencies and exchange rates, tax categories, payment methods and customer groups remain pending
+- [ ] Items CRUD with all fields in §4.2: item identity, type, serial/batch tracking, description, unit conversions and replenishment fields are implemented locally; category, sales-price, tax, KRA and variant fields remain pending
 
 Frontend:
 - [x] Login page, protected routes, permission-aware menu (Phase 1A on `dfstock`)
@@ -83,7 +83,7 @@ Frontend:
 **Acceptance criteria:**
 - Users without a permission get `403` from the API and don't see the menu item.
 - Every create/update is visible in the audit log with the user and a diff.
-- Items can be created for all six item types, with unit conversions.
+- Items can be created locally for all six item types, with validated unit conversions. Staging acceptance is pending. Stock posting still takes base-unit quantities and does not convert entered units.
 
 ---
 
@@ -156,7 +156,7 @@ nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
 and nightly-operation gates.
 Nightly scheduling, alert delivery and a representative-volume run remain
 deployment tasks. No reconciliation result automatically changes stock.
-The complete local suite currently passes 199 tests across shared, backend and
+The complete local suite currently passes 201 tests across shared, backend and
 frontend; this is not staging acceptance evidence.
 The FIFO layer API and item detail now page layers in receipt order, with a
 bounded query and an explicit load-more action. Representative-volume staging

@@ -5,6 +5,11 @@ quantities and FIFO value by item and location. Each item links to stock detail 
 for balances, cursor-paged FIFO layers, and cursor-paged movement history. The backend remains
 authoritative for access control and stock posting.
 
+The item form records optional unit conversions and replenishment settings.
+Conversions describe the item master only; stock requests and imports still
+require quantities in the item's base unit. Existing conversion definitions
+cannot be changed after a stock movement has been posted for that item.
+
 The reconciliation page is available to users with
 `inventory.reconciliation.read`. It starts a read-only check only when the user
 presses the button, then displays any quantity and value differences. The

@@ -31,6 +31,11 @@ type Draft = {
   name: string;
   type: string;
   baseUnit: string;
+  description: string;
+  unitConversions: { unit: string; baseQuantity: string }[];
+  reorderLevel: string;
+  reorderQty: string;
+  leadTimeDays: string;
   trackSerial: boolean;
   trackBatch: boolean;
   isActive: boolean;
@@ -42,6 +47,11 @@ function blankDraft(kind: Kind): Draft {
     name: '',
     type: kind === 'items' ? ITEM_TYPES[0] : LOCATION_TYPES[0],
     baseUnit: 'PCS',
+    description: '',
+    unitConversions: [],
+    reorderLevel: '',
+    reorderQty: '',
+    leadTimeDays: '',
     trackSerial: false,
     trackBatch: false,
     isActive: true,
@@ -54,6 +64,11 @@ function recordDraft(record: Record): Draft {
     name: record.name,
     type: record.type,
     baseUnit: 'baseUnit' in record ? record.baseUnit : 'PCS',
+    description: 'sku' in record ? record.description : '',
+    unitConversions: 'sku' in record ? record.unitConversions : [],
+    reorderLevel: 'sku' in record ? (record.reorderLevel ?? '') : '',
+    reorderQty: 'sku' in record ? (record.reorderQty ?? '') : '',
+    leadTimeDays: 'sku' in record ? String(record.leadTimeDays ?? '') : '',
     trackSerial: 'trackSerial' in record ? record.trackSerial : false,
     trackBatch: 'trackBatch' in record ? record.trackBatch : false,
     isActive: record.isActive,
@@ -106,6 +121,15 @@ export function MasterDataPage({ kind }: { kind: Kind }) {
           name: draft.name,
           type: draft.type,
           baseUnit: draft.baseUnit,
+          description: draft.description,
+          unitConversions: draft.unitConversions,
+          reorderLevel: draft.reorderLevel.trim() || (editing === 'new' ? undefined : null),
+          reorderQty: draft.reorderQty.trim() || (editing === 'new' ? undefined : null),
+          leadTimeDays: draft.leadTimeDays.trim()
+            ? Number(draft.leadTimeDays)
+            : editing === 'new'
+              ? undefined
+              : null,
           trackSerial: draft.trackSerial,
           trackBatch: draft.trackBatch,
         };
@@ -218,6 +242,126 @@ export function MasterDataPage({ kind }: { kind: Kind }) {
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
                 />
               </label>
+            )}
+            {kind === 'items' && (
+              <>
+                <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+                  Description
+                  <textarea
+                    maxLength={2000}
+                    value={draft.description}
+                    onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                    rows={3}
+                  />
+                </label>
+                <fieldset className="space-y-3 rounded-lg border border-slate-200 p-3 sm:col-span-2">
+                  <legend className="px-1 text-sm font-semibold text-slate-700">
+                    Unit conversions
+                  </legend>
+                  <p className="text-xs text-slate-600">
+                    Each row defines how many base units are in one entered unit. Stock postings
+                    still use the base unit.
+                  </p>
+                  {draft.unitConversions.map((conversion, index) => (
+                    <div key={index} className="flex flex-wrap items-end gap-3">
+                      <label className="min-w-32 flex-1 text-sm text-slate-700">
+                        Conversion unit {index + 1}
+                        <input
+                          required
+                          maxLength={80}
+                          value={conversion.unit}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              unitConversions: draft.unitConversions.map((row, rowIndex) =>
+                                rowIndex === index ? { ...row, unit: event.target.value } : row,
+                              ),
+                            })
+                          }
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                        />
+                      </label>
+                      <label className="min-w-32 flex-1 text-sm text-slate-700">
+                        Base quantity {index + 1}
+                        <input
+                          required
+                          inputMode="decimal"
+                          value={conversion.baseQuantity}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              unitConversions: draft.unitConversions.map((row, rowIndex) =>
+                                rowIndex === index
+                                  ? { ...row, baseQuantity: event.target.value }
+                                  : row,
+                              ),
+                            })
+                          }
+                          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraft({
+                            ...draft,
+                            unitConversions: draft.unitConversions.filter(
+                              (_, rowIndex) => rowIndex !== index,
+                            ),
+                          })
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={draft.unitConversions.length >= 20}
+                    onClick={() =>
+                      setDraft({
+                        ...draft,
+                        unitConversions: [...draft.unitConversions, { unit: '', baseQuantity: '' }],
+                      })
+                    }
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:opacity-50"
+                  >
+                    Add unit conversion
+                  </button>
+                </fieldset>
+                <label className="text-sm font-medium text-slate-700">
+                  Reorder level (base units)
+                  <input
+                    inputMode="decimal"
+                    value={draft.reorderLevel}
+                    onChange={(event) => setDraft({ ...draft, reorderLevel: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-700">
+                  Reorder quantity (base units)
+                  <input
+                    inputMode="decimal"
+                    value={draft.reorderQty}
+                    onChange={(event) => setDraft({ ...draft, reorderQty: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-700">
+                  Lead time (days)
+                  <input
+                    type="number"
+                    min={0}
+                    max={3650}
+                    step={1}
+                    value={draft.leadTimeDays}
+                    onChange={(event) => setDraft({ ...draft, leadTimeDays: event.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                  />
+                </label>
+              </>
             )}
             {kind === 'items' && (
               <div className="flex flex-wrap items-center gap-5 text-sm text-slate-700">

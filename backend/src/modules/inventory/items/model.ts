@@ -9,6 +9,11 @@ export interface ItemDoc {
   name: string;
   type: ItemType;
   baseUnit: string;
+  description?: string;
+  unitConversions: { unit: string; baseQuantity: string }[];
+  reorderLevel?: string | null;
+  reorderQty?: string | null;
+  leadTimeDays?: number | null;
   trackSerial: boolean;
   trackBatch: boolean;
   isActive: boolean;
@@ -22,6 +27,22 @@ const itemSchema = new Schema<ItemDoc>(
     name: { type: String, required: true, trim: true },
     type: { type: String, enum: ITEM_TYPES, required: true },
     baseUnit: { type: String, required: true, trim: true, uppercase: true },
+    description: { type: String, trim: true },
+    unitConversions: {
+      type: [
+        new Schema(
+          {
+            unit: { type: String, required: true, trim: true, uppercase: true },
+            baseQuantity: { type: String, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    reorderLevel: String,
+    reorderQty: String,
+    leadTimeDays: { type: Number, min: 0, max: 3650 },
     trackSerial: { type: Boolean, default: false },
     trackBatch: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },

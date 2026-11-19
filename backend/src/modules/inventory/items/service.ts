@@ -12,6 +12,14 @@ function publicItem(item: ItemDoc & { _id: Types.ObjectId }) {
     name: item.name,
     type: item.type,
     baseUnit: item.baseUnit,
+    description: item.description ?? '',
+    unitConversions: (item.unitConversions ?? []).map((conversion) => ({
+      unit: conversion.unit,
+      baseQuantity: conversion.baseQuantity,
+    })),
+    reorderLevel: item.reorderLevel ?? null,
+    reorderQty: item.reorderQty ?? null,
+    leadTimeDays: item.leadTimeDays ?? null,
     trackSerial: item.trackSerial,
     trackBatch: item.trackBatch,
     isActive: item.isActive,
@@ -74,12 +82,21 @@ export async function updateItem(itemId: string, input: UpdateItemInput, actorId
       const item = await Item.findById(itemId).session(session);
       if (!item) throw AppError.notFound('Item not found');
       const before = publicItem(item);
+      if (
+        (input.unitConversions ?? before.unitConversions).some(
+          (conversion) => conversion.unit === (input.baseUnit ?? item.baseUnit),
+        )
+      ) {
+        throw AppError.badRequest('Conversion unit must differ from the base unit');
+      }
       const identityChanged =
         (input.sku !== undefined && input.sku !== item.sku) ||
         (input.type !== undefined && input.type !== item.type) ||
         (input.baseUnit !== undefined && input.baseUnit !== item.baseUnit) ||
         (input.trackSerial !== undefined && input.trackSerial !== item.trackSerial) ||
-        (input.trackBatch !== undefined && input.trackBatch !== item.trackBatch);
+        (input.trackBatch !== undefined && input.trackBatch !== item.trackBatch) ||
+        (input.unitConversions !== undefined &&
+          JSON.stringify(input.unitConversions) !== JSON.stringify(before.unitConversions));
       if (
         (identityChanged || input.isActive === false) &&
         (await StockMovement.exists({ itemId: item._id }).session(session))

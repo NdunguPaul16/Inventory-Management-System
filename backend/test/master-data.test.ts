@@ -90,6 +90,78 @@ beforeEach(async () => {
 });
 
 describe('inventory item and location management', () => {
+  it('creates all six item types with validated base-unit conversions and replenishment data', async () => {
+    for (const type of [
+      'RAW_MATERIAL',
+      'COMPONENT',
+      'FINISHED_GOOD',
+      'TRADING_GOOD',
+      'CONSUMABLE',
+      'SERVICE',
+    ]) {
+      const created = await request(app)
+        .post('/api/v1/inventory/items')
+        .set('Authorization', adminToken)
+        .send({
+          sku: `UNIT-${type}`,
+          name: `Unit ${type}`,
+          type,
+          baseUnit: 'PCS',
+          description: 'Master-data fixture',
+          unitConversions: [{ unit: 'SET', baseQuantity: '2.5' }],
+          reorderLevel: '0',
+          reorderQty: '4.5',
+          leadTimeDays: 7,
+        })
+        .expect(201);
+      expect(created.body.data).toMatchObject({
+        type,
+        description: 'Master-data fixture',
+        unitConversions: [{ unit: 'SET', baseQuantity: '2.5' }],
+        reorderLevel: '0',
+        reorderQty: '4.5',
+        leadTimeDays: 7,
+      });
+    }
+    for (const unitConversions of [
+      [{ unit: 'PCS', baseQuantity: '2' }],
+      [{ unit: 'SET', baseQuantity: '0' }],
+      [
+        { unit: 'SET', baseQuantity: '2' },
+        { unit: 'set', baseQuantity: '3' },
+      ],
+    ]) {
+      await request(app)
+        .post('/api/v1/inventory/items')
+        .set('Authorization', adminToken)
+        .send({
+          sku: `INVALID-${randomUUID()}`,
+          name: 'Invalid conversion',
+          type: 'TRADING_GOOD',
+          baseUnit: 'PCS',
+          unitConversions,
+        })
+        .expect(400);
+    }
+    const existing = await Item.findOne({ sku: 'UNIT-RAW_MATERIAL' }).lean();
+    if (!existing) throw new Error('Item fixture was not created');
+    await request(app)
+      .patch(`/api/v1/inventory/items/${existing._id}`)
+      .set('Authorization', adminToken)
+      .send({ baseUnit: 'SET' })
+      .expect(400);
+    const cleared = await request(app)
+      .patch(`/api/v1/inventory/items/${existing._id}`)
+      .set('Authorization', adminToken)
+      .send({ reorderLevel: null, reorderQty: null, leadTimeDays: null })
+      .expect(200);
+    expect(cleared.body.data).toMatchObject({
+      reorderLevel: null,
+      reorderQty: null,
+      leadTimeDays: null,
+    });
+  });
+
   it('creates, searches and updates audited master data without weakening Stockkeeper permissions', async () => {
     const item = await request(app)
       .post('/api/v1/inventory/items')
@@ -262,6 +334,7 @@ describe('inventory item and location management', () => {
       { type: 'SERVICE' },
       { baseUnit: 'KG' },
       { trackSerial: true },
+      { unitConversions: [{ unit: 'ROLL', baseQuantity: '25' }] },
       { isActive: false },
     ]) {
       await request(app)
@@ -282,6 +355,16 @@ describe('inventory item and location management', () => {
       .set('Authorization', adminToken)
       .send({ name: 'Updated warehouse' })
       .expect(200);
+    const descriptive = await request(app)
+      .patch(`/api/v1/inventory/items/${item._id}`)
+      .set('Authorization', adminToken)
+      .send({ description: 'Updated after stock', reorderLevel: '0', leadTimeDays: 5 })
+      .expect(200);
+    expect(descriptive.body.data).toMatchObject({
+      description: 'Updated after stock',
+      reorderLevel: '0',
+      leadTimeDays: 5,
+    });
     expect(
       (await StockBalance.findOne({ itemId: item._id, locationId: location._id }))?.value,
     ).toBe(125);
