@@ -6,6 +6,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuditLog } from '../src/modules/audit/model.js';
 import { Counter } from '../src/modules/counters/model.js';
 import { StockAction } from '../src/modules/inventory/action-model.js';
+import { StockCount } from '../src/modules/inventory/count-model.js';
 import {
   CostLayer,
   PostingRequest,
@@ -30,6 +31,7 @@ beforeAll(async () => {
     AuditLog.createCollection(),
     Counter.createCollection(),
     StockAction.createCollection(),
+    StockCount.createCollection(),
     CostLayer.createCollection(),
     PostingRequest.createCollection(),
     StockBalance.createCollection(),
@@ -41,6 +43,7 @@ beforeAll(async () => {
   ]);
   await Promise.all([
     StockAction.syncIndexes(),
+    StockCount.syncIndexes(),
     CostLayer.syncIndexes(),
     PostingRequest.syncIndexes(),
     StockBalance.syncIndexes(),
@@ -55,6 +58,7 @@ beforeEach(async () => {
     AuditLog.deleteMany({}),
     Counter.deleteMany({}),
     StockAction.deleteMany({}),
+    StockCount.deleteMany({}),
     CostLayer.deleteMany({}),
     PostingRequest.deleteMany({}),
     StockBalance.deleteMany({}),
@@ -199,6 +203,94 @@ describe('stock request authorization before lookup', () => {
 });
 
 describe('opening stock approval and posting', () => {
+  it('carries approved opening value through transfer, count and reconciliation routes', async () => {
+    const destination = await Location.create({
+      code: `DEST-${randomUUID().slice(0, 8)}`,
+      name: 'Destination location',
+      type: 'WAREHOUSE',
+    });
+    const storeRole = await Role.create(
+      DEFAULT_ROLES.find((entry) => entry.name === 'Storekeeper')!,
+    );
+    const storeUser = await User.create({
+      name: 'Stock counter',
+      email: `counter-${randomUUID()}@example.com`,
+      passwordHash: 'unused',
+      roleIds: [storeRole._id],
+    });
+    const storeToken = jwt.sign(
+      { type: 'access' },
+      'test-access-token-secret-that-is-at-least-32-characters',
+      { subject: String(storeUser._id), expiresIn: 60 },
+    );
+    const storeAuthorization = `Bearer ${storeToken}`;
+
+    const actionId = await approvedOpening();
+    await request(app)
+      .post(`/api/v1/inventory/requests/${actionId}/post`)
+      .set('Authorization', authorization)
+      .expect(201);
+
+    const moved = await request(app)
+      .post('/api/v1/inventory/transfers')
+      .set('Authorization', storeAuthorization)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        itemId: String(itemId),
+        fromLocationId: String(locationId),
+        toLocationId: String(destination._id),
+        quantity: '0.1',
+        sourceDoc: { type: 'TRANSFER_SHEET', id: randomUUID(), number: 'MOVE-1' },
+      })
+      .expect(201);
+    expect(
+      moved.body.data.movements.map((movement: { totalCost: number }) => movement.totalCost),
+    ).toEqual([11, 11]);
+
+    const frozen = await request(app)
+      .post('/api/v1/inventory/counts')
+      .set('Authorization', storeAuthorization)
+      .send({ itemId: String(itemId), locationId: String(destination._id) })
+      .expect(201);
+    expect(frozen.body.data).toMatchObject({ bookQuantity: '0.1', bookValue: 11 });
+    const countId = frozen.body.data.id as string;
+    await request(app)
+      .patch(`/api/v1/inventory/counts/${countId}/entry`)
+      .set('Authorization', storeAuthorization)
+      .send({ countedQuantity: '0', reason: 'Destination shelf empty' })
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/inventory/counts/${countId}/approve`)
+      .set('Authorization', storeAuthorization)
+      .expect(403);
+    await request(app)
+      .post(`/api/v1/inventory/counts/${countId}/approve`)
+      .set('Authorization', authorization)
+      .expect(200);
+    const posted = await request(app)
+      .post(`/api/v1/inventory/counts/${countId}/post`)
+      .set('Authorization', authorization)
+      .expect(201);
+    expect(posted.body.data).toMatchObject({ status: 'POSTED', varianceQuantity: '-0.1' });
+
+    const [sourceBalance, destinationBalance] = await Promise.all([
+      StockBalance.findOne({ itemId, locationId }).lean(),
+      StockBalance.findOne({ itemId, locationId: destination._id }).lean(),
+    ]);
+    expect(sourceBalance?.onHand.toString()).toBe('0.4');
+    expect(sourceBalance?.value).toBe(40);
+    expect(destinationBalance?.onHand.toString()).toBe('0');
+    expect(destinationBalance?.value).toBe(0);
+    expect((await StockMovement.findById(posted.body.data.movementIds[0]))?.totalCost).toBe(11);
+    await request(app)
+      .get('/api/v1/inventory/reconciliation')
+      .set('Authorization', authorization)
+      .expect(200)
+      .then((response) => {
+        expect(response.body.data).toEqual({ checked: 2, differences: [] });
+      });
+  });
+
   it('records a fractional opening, its approval, audits and idempotent posting', async () => {
     const actionId = await approvedOpening();
     const first = await request(app)

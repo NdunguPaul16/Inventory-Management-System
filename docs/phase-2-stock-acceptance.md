@@ -22,6 +22,10 @@ npm run test:engine:coverage -w backend
 The FIFO coverage gate is 90% of engine lines. Automated tests cover concurrent
 OUT, idempotency, transaction rollback, fractional transfer/reversal value
 conservation, controlled stock actions, serial counts and reconciliation. The
+API-level workflow test also carries a fractional approved opening through a
+Storekeeper transfer and count, separate Admin approval, posting and a clean
+read-only reconciliation in one disposable in-memory replica set. This verifies
+the combined route sequence locally; staging acceptance remains separate. The
 compiled `reconcile:stock` job is tested against an in-memory replica set for a
 clean ledger, a one-cent difference and missing database configuration. Local
 results do not establish deployed behavior or representative-volume performance.
