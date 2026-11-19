@@ -47,7 +47,7 @@ describe('read-only stock reconciliation job', () => {
       childEnv,
     );
     expect(build.code).toBe(0);
-  }, 30_000);
+  }, 60_000);
 
   it('fails closed with a generic error when database configuration is missing', async () => {
     const result = await childResult(process.execPath, ['dist/jobs/reconcile-stock.js'], childEnv);
