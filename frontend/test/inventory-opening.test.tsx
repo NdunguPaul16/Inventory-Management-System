@@ -34,8 +34,20 @@ function action(
   };
 }
 
-function mockApi(permissions: string[], initial = [action()], failCreate = false) {
+function mockApi(
+  permissions: string[],
+  initial = [action()],
+  failCreate = false,
+  customApprover = false,
+) {
   const user = { ...testUser(permissions), id: USER_ID };
+  if (customApprover) {
+    user.roles = user.roles.map((role) => ({
+      ...role,
+      name: 'Custom Approver',
+      isSystem: false,
+    }));
+  }
   let records = initial;
   let creates = 0;
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
@@ -83,6 +95,24 @@ describe('opening stock page', () => {
     expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => url.startsWith('/api/v1/inventory/'))).toBe(false);
   });
+
+  it.each([
+    ['PENDING_APPROVAL', 'Approve'],
+    ['APPROVED', 'Post opening stock'],
+  ] as const)(
+    'hides %s actions from a custom role with approval permissions',
+    async (status, button) => {
+      mockApi(
+        ['inventory.requests.read', 'inventory.opening.approve', 'inventory.opening.post'],
+        [action(status)],
+        false,
+        true,
+      );
+      renderRoute('/inventory/opening-stock');
+      await screen.findByText(/STKACT-0001/);
+      expect(screen.queryByRole('button', { name: button })).not.toBeInTheDocument();
+    },
+  );
 
   it('submits a validated opening request with the chosen FIFO receipt date', async () => {
     const fetchMock = mockApi(['inventory.opening.request'], []);

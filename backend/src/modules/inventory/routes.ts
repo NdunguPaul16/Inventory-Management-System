@@ -1,9 +1,10 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import {
   adjustmentSchema,
   enterStockCountSchema,
   enterSerialStockCountSchema,
   freezeStockCountSchema,
+  isSystemStockApprover,
   openingStockSchema,
   openingStockBatchSchema,
   openingStockImportSchema,
@@ -80,6 +81,13 @@ function permissions(res: Response): readonly string[] {
 }
 
 export const inventoryRoutes = Router();
+
+const requireStockApproverRole: RequestHandler = (_req, res, next) => {
+  if (!res.locals.authUser || !isSystemStockApprover(res.locals.authUser)) {
+    return next(AppError.forbidden());
+  }
+  return next();
+};
 
 const canSelectStockReferences = requireAnyPermission(
   'inventory.opening.request',
@@ -257,6 +265,7 @@ inventoryRoutes.post(
     'inventory.adjustments.approve',
     'inventory.movements.reverse.approve',
   ),
+  requireStockApproverRole,
   validate({ params: requestParams }),
   async (_req, res) => {
     const params = res.locals.validated?.params as z.infer<typeof requestParams>;
@@ -272,6 +281,7 @@ inventoryRoutes.post(
     'inventory.adjustments.approve',
     'inventory.movements.reverse.approve',
   ),
+  requireStockApproverRole,
   validate({ params: requestParams, body: rejectStockActionSchema }),
   async (_req, res) => {
     const params = res.locals.validated?.params as z.infer<typeof requestParams>;
@@ -293,6 +303,7 @@ inventoryRoutes.post(
     'inventory.adjustments.post',
     'inventory.movements.reverse.post',
   ),
+  requireStockApproverRole,
   validate({ params: requestParams }),
   async (_req, res) => {
     const params = res.locals.validated?.params as z.infer<typeof requestParams>;
@@ -384,6 +395,7 @@ inventoryRoutes.patch(
 inventoryRoutes.post(
   '/counts/:countId/approve',
   requirePermission('inventory.counts.approve'),
+  requireStockApproverRole,
   validate({ params: countParams }),
   async (_req, res) => {
     const { countId } = res.locals.validated?.params as z.infer<typeof countParams>;
@@ -394,6 +406,7 @@ inventoryRoutes.post(
 inventoryRoutes.post(
   '/counts/:countId/reject',
   requirePermission('inventory.counts.approve'),
+  requireStockApproverRole,
   validate({ params: countParams, body: rejectStockCountSchema }),
   async (_req, res) => {
     const { countId } = res.locals.validated?.params as z.infer<typeof countParams>;
@@ -405,6 +418,7 @@ inventoryRoutes.post(
 inventoryRoutes.post(
   '/counts/:countId/post',
   requirePermission('inventory.counts.post'),
+  requireStockApproverRole,
   validate({ params: countParams }),
   async (_req, res) => {
     const { countId } = res.locals.validated?.params as z.infer<typeof countParams>;

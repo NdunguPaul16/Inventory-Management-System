@@ -42,8 +42,20 @@ function action(
   };
 }
 
-function mockAdjustmentApi(permissions: string[], initial = [action()], firstRequestFails = false) {
+function mockAdjustmentApi(
+  permissions: string[],
+  initial = [action()],
+  firstRequestFails = false,
+  customApprover = false,
+) {
   const user = { ...testUser(permissions), id: USER_ID };
+  if (permissions.some((permission) => permission.endsWith('.approve'))) {
+    user.roles = user.roles.map((role) => ({
+      ...role,
+      name: customApprover ? 'Custom Approver' : 'Owner / Manager',
+      isSystem: !customApprover,
+    }));
+  }
   let records = initial;
   let creates = 0;
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
@@ -160,6 +172,24 @@ describe('stock adjustments page', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/approve'))).toHaveLength(1);
     expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/post'))).toHaveLength(1);
   });
+
+  it.each([
+    ['PENDING_APPROVAL', 'Approve'],
+    ['APPROVED', 'Post adjustment'],
+  ] as const)(
+    'hides %s actions from a custom role with approval permissions',
+    async (status, button) => {
+      mockAdjustmentApi(
+        ['inventory.requests.read', 'inventory.adjustments.approve', 'inventory.adjustments.post'],
+        [action(status)],
+        false,
+        true,
+      );
+      renderRoute('/inventory/adjustments');
+      await screen.findByText(/STKACT-0001/);
+      expect(screen.queryByRole('button', { name: button })).not.toBeInTheDocument();
+    },
+  );
 
   it('hides approval from the requester and allows rejection with a reason', async () => {
     const fetchMock = mockAdjustmentApi(

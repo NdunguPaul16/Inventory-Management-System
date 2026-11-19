@@ -57,8 +57,16 @@ function mockCountApi(
   permissions: string[],
   initial: Array<ReturnType<typeof count> | ReturnType<typeof serialCount>> = [count()],
   listStatus = 200,
+  customApprover = false,
 ) {
   const user = { ...testUser(permissions), id: USER_ID };
+  if (permissions.some((permission) => permission.endsWith('.approve'))) {
+    user.roles = user.roles.map((role) => ({
+      ...role,
+      name: customApprover ? 'Custom Approver' : 'Owner / Manager',
+      isSystem: !customApprover,
+    }));
+  }
   let records = initial;
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
     if (url === '/api/v1/auth/refresh') return jsonResponse(200, sessionBody(user));
@@ -208,6 +216,24 @@ describe('stock count workflow', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/approve'))).toHaveLength(1);
     expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/post'))).toHaveLength(1);
   });
+
+  it.each([
+    ['PENDING_APPROVAL', 'Approve'],
+    ['APPROVED', 'Post variance'],
+  ] as const)(
+    'hides %s actions from a custom role with approval permissions',
+    async (status, button) => {
+      mockCountApi(
+        ['inventory.counts.read', 'inventory.counts.approve', 'inventory.counts.post'],
+        [count(status)],
+        200,
+        true,
+      );
+      renderRoute('/inventory/counts');
+      await screen.findByText('COUNT-0001 · CUE-001');
+      expect(screen.queryByRole('button', { name: button })).not.toBeInTheDocument();
+    },
+  );
 
   it('can freeze an active item and location even without an existing balance', async () => {
     const fetchMock = mockCountApi(['inventory.counts.read', 'inventory.counts.freeze'], []);

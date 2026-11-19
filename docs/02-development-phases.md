@@ -99,8 +99,9 @@ balance reconciliation, shared request schemas, and permission-gated inventory r
 been added. Authentication now populates the permission context. Opening stock,
 adjustments and reversals use request → approval → posting records with restricted role
 permissions; FIFO layers persist rounded remaining cents so transfers and reversals carry
-recorded costs. Configurable approval thresholds and deployed Phase 2 acceptance
-remain outstanding.
+recorded costs. Deployed Phase 2 acceptance remains outstanding. The later D12
+decision requires Manager/Admin approval for every stock variance, so a stock
+value threshold does not change approval authority.
 
 **Local Phase 2 branch progress (2026-11-18):** a stock-count backend
 now records a book snapshot, count entry, separate approval, and FIFO
@@ -136,7 +137,7 @@ transfer and reversal tests cover value conservation; a full valuation report
 and late landed-cost effects remain later-phase work.
 The backend now enforces a per-file 90% line-coverage gate for the FIFO engine
 through `npm run test:engine:coverage -w backend`. The latest local result is
-90.72% engine lines and 90.21% for `service.ts` (102 backend tests); branch coverage
+90.72% engine lines and 90.21% for `service.ts` (107 backend tests); branch coverage
 is 79.4%, so this does not establish comprehensive branch coverage. A serial
 receipt regression test also exposed and corrected a Mongoose transaction
 option required when creating multiple serial records. These changes have not
@@ -150,13 +151,19 @@ An authorised inventory page runs the check only when requested; a read-only
 job command reports counts and exits nonzero when differences exist. An
 in-memory replica-set test executes the compiled job for both a clean ledger
 and a one-cent drift, confirming its exit codes and that it writes no stock or
-audit records.
+audit records. A missing-configuration check verifies a generic failure and
+nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
+and nightly-operation gates.
 Nightly scheduling, alert delivery and a representative-volume run remain
 deployment tasks. No reconciliation result automatically changes stock.
-The complete local suite currently passes 172 tests across shared, backend and
+The complete local suite currently passes 183 tests across shared, backend and
 frontend; this is not staging acceptance evidence.
 Stock action approval, rejection and posting now check the caller's operation
 permission before request lookup, and filter request types by that permission.
+The API also requires an active system Admin or Owner / Manager role before
+stock approval, rejection and posting lookups. Custom roles with matching
+permission strings receive `403`; frontend action controls follow the same
+role rule. Tests cover existing and nonexistent IDs without an existence leak.
 This prevents a restricted user from distinguishing an existing request from a
 nonexistent one through the mutation API.
 
@@ -166,7 +173,7 @@ Backend:
 - [x] Negative-stock guard; idempotency keys on posting endpoints (local)
 - [x] **Opening stock** import (CSV/Excel → validated → posted as `OPENING` layers) (local)
 - [x] Stock adjustment request → separate approval → posting workflow (local)
-- [ ] Configurable adjustment and count-variance value thresholds (§12; Phase 1 settings prerequisite; separate approval remains mandatory at every value)
+- [x] Stock approval authority: a different Manager/Admin approves every adjustment and count variance, regardless of value (§12; API and UI enforced locally)
 - [x] Stock transfers between locations (FIFO layers preserved) (local)
 - [x] Stock counts: freeze → count entry → variance review → post `COUNT_VARIANCE` (local)
 - [x] Read-only reconciliation command and permission-gated endpoint (§5.4) (local)

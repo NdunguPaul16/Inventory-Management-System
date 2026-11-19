@@ -116,11 +116,11 @@ async function approvedOpening() {
   return actionId;
 }
 
-async function authorizationWithPermissions(granted: string[]) {
+async function authorizationWithPermissions(granted: string[], systemManager = false) {
   const role = await Role.create({
-    name: `Restricted-${randomUUID()}`,
+    name: systemManager ? 'Owner / Manager' : `Restricted-${randomUUID()}`,
     permissions: granted,
-    isSystem: false,
+    isSystem: systemManager,
   });
   const user = await User.create({
     name: 'Restricted stock user',
@@ -159,10 +159,10 @@ describe('stock request authorization before lookup', () => {
     ['reject', 'inventory.adjustments.approve'],
     ['post', 'inventory.adjustments.post'],
   ] as const)(
-    'hides opening requests from a user with only %s permission for adjustments',
+    'hides opening requests from a Manager with only %s permission for adjustments',
     async (operation, permission) => {
       const actionId = await approvedOpening();
-      const restricted = await authorizationWithPermissions([permission]);
+      const restricted = await authorizationWithPermissions([permission], true);
       const call = (requestId: string) =>
         request(app)
           .post(`/api/v1/inventory/requests/${requestId}/${operation}`)
@@ -170,6 +170,28 @@ describe('stock request authorization before lookup', () => {
           .send(operation === 'reject' ? { reason: 'Not authorised' } : {});
       const existing = await call(actionId).expect(404);
       const missing = await call(String(new Types.ObjectId())).expect(404);
+      expect(existing.body).toEqual(missing.body);
+      expect((await StockAction.findById(actionId))?.status).toBe('APPROVED');
+    },
+  );
+
+  it.each([
+    ['approve', 'inventory.opening.approve'],
+    ['approve', '*'],
+    ['reject', 'inventory.opening.approve'],
+    ['post', 'inventory.opening.post'],
+  ] as const)(
+    'denies %s to a custom role even with the matching stock permission',
+    async (operation, permission) => {
+      const actionId = await approvedOpening();
+      const customRole = await authorizationWithPermissions([permission]);
+      const call = (requestId: string) =>
+        request(app)
+          .post(`/api/v1/inventory/requests/${requestId}/${operation}`)
+          .set('Authorization', customRole)
+          .send(operation === 'reject' ? { reason: 'Not authorised' } : {});
+      const existing = await call(actionId).expect(403);
+      const missing = await call(String(new Types.ObjectId())).expect(403);
       expect(existing.body).toEqual(missing.body);
       expect((await StockAction.findById(actionId))?.status).toBe('APPROVED');
     },

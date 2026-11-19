@@ -740,6 +740,27 @@ describe('stock counts', () => {
       .set('Authorization', `Bearer ${token(storekeeper)}`)
       .send({ countedQuantity: '0', reason: 'Shelf is empty' })
       .expect(200);
+    const customRole = await Role.create({
+      name: 'Custom count approver',
+      permissions: ['inventory.counts.approve', 'inventory.counts.post'],
+      isSystem: false,
+    });
+    const customUser = await User.create({
+      name: 'Custom Approver',
+      email: 'custom-count-approver@example.com',
+      passwordHash: 'unused',
+      roleIds: [customRole._id],
+    });
+    for (const operation of ['approve', 'reject', 'post'] as const) {
+      const call = (targetId: string) =>
+        request(app)
+          .post(`/api/v1/inventory/counts/${targetId}/${operation}`)
+          .set('Authorization', `Bearer ${token(customUser._id)}`)
+          .send(operation === 'reject' ? { reason: 'Not authorised' } : {});
+      const existing = await call(countId).expect(403);
+      const missing = await call(String(new Types.ObjectId())).expect(403);
+      expect(existing.body).toEqual(missing.body);
+    }
     await request(app)
       .post(`/api/v1/inventory/counts/${countId}/approve`)
       .set('Authorization', `Bearer ${token(manager)}`)

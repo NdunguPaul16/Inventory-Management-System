@@ -273,9 +273,9 @@ postMovement(input):
 **Controlled stock actions:** opening stock, adjustments and reversals create a
 `stock_action_requests` record first. An authorised approver reviews the request,
 and that approver posts it after approval. The posting uses the approved request
-as its source document and a stable idempotency key. Until configurable approval
-thresholds are delivered, every adjustment requires approval. A different user
-must approve a request, except that an Admin may self-approve opening stock
+as its source document and a stable idempotency key. Every adjustment requires
+a different Manager or Admin approver, regardless of value. A different user
+must approve other requests, except that an Admin may self-approve opening stock
 before any operational stock movement exists; the override remains in the audit trail.
 
 **Stock counts:** for an item and location, a Storekeeper freezes a
@@ -525,13 +525,12 @@ approve and post approved opening-stock, adjustment and reversal requests;
 Managers or Admins can request reversals. System role permissions are seeded
 from code and refreshed at startup; custom roles can be created separately.
 
-**Approval rules** (configurable in settings):
+**Approval rules** (some configurable in settings):
 
 - PO above amount X → Manager approval.
-- Any stock adjustment / count variance above value Y → Manager approval. Until
-  the threshold setting is available, every adjustment requires approval.
-- At or below Y, a different authorised user must still approve the adjustment
-  or count variance. A threshold never authorises automatic posting.
+- Every stock adjustment and count variance requires approval from a different
+  Manager or Admin, regardless of value. A future value threshold must not
+  reduce that authority or authorise automatic posting.
 - Opening stock and stock reversals require an approved request before posting.
 - Price override beyond Z% discount or below cost → Manager approval.
 - Invoice cancellation (credit note) → Manager approval.

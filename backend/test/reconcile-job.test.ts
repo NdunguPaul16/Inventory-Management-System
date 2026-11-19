@@ -49,6 +49,13 @@ describe('read-only stock reconciliation job', () => {
     expect(build.code).toBe(0);
   }, 30_000);
 
+  it('fails closed with a generic error when database configuration is missing', async () => {
+    const result = await childResult(process.execPath, ['dist/jobs/reconcile-stock.js'], childEnv);
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('Stock reconciliation failed; no stock records were changed.\n');
+  });
+
   it('exits zero for consistent stock and two for drift without changing records', async () => {
     const databaseName = mongoose.connection.db?.databaseName;
     if (!databaseName) throw new Error('In-memory test database is unavailable');

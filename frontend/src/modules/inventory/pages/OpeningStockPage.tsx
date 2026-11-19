@@ -1,6 +1,11 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
-import { openingStockSchema, rejectStockActionSchema, type OpeningStockInput } from '@ims/shared';
+import {
+  isSystemStockApprover,
+  openingStockSchema,
+  rejectStockActionSchema,
+  type OpeningStockInput,
+} from '@ims/shared';
 import { Card, PageHeader } from '../../../components/Card';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { ApiRequestError } from '../../../lib/api';
@@ -51,8 +56,12 @@ export function OpeningStockPage() {
 
   const canRequest = Boolean(user && canAccess(user, 'inventory.opening.request'));
   const canRead = Boolean(user && canAccess(user, 'inventory.requests.read'));
-  const canApprove = Boolean(user && canAccess(user, 'inventory.opening.approve'));
-  const canPost = Boolean(user && canAccess(user, 'inventory.opening.post'));
+  const canApprove = Boolean(
+    user && isSystemStockApprover(user) && canAccess(user, 'inventory.opening.approve'),
+  );
+  const canPost = Boolean(
+    user && isSystemStockApprover(user) && canAccess(user, 'inventory.opening.post'),
+  );
   const history = useInfiniteQuery({
     queryKey: ['inventory', 'opening', statusFilter],
     queryFn: ({ pageParam, signal }) =>

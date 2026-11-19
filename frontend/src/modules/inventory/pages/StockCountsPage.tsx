@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import {
   enterSerialStockCountSchema,
   enterStockCountSchema,
+  isSystemStockApprover,
   rejectStockCountSchema,
 } from '@ims/shared';
 import { Card, PageHeader } from '../../../components/Card';
@@ -59,8 +60,12 @@ export function StockCountsPage() {
 
   const canFreeze = Boolean(user && canAccess(user, 'inventory.counts.freeze'));
   const canEnter = Boolean(user && canAccess(user, 'inventory.counts.enter'));
-  const canApprove = Boolean(user && canAccess(user, 'inventory.counts.approve'));
-  const canPost = Boolean(user && canAccess(user, 'inventory.counts.post'));
+  const canApprove = Boolean(
+    user && isSystemStockApprover(user) && canAccess(user, 'inventory.counts.approve'),
+  );
+  const canPost = Boolean(
+    user && isSystemStockApprover(user) && canAccess(user, 'inventory.counts.post'),
+  );
   const counts = useInfiniteQuery({
     queryKey: ['inventory', 'counts', statusFilter],
     queryFn: ({ pageParam, signal }) =>
