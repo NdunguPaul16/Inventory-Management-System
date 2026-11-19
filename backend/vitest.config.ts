@@ -10,5 +10,12 @@ export default defineConfig({
     hookTimeout: 120_000,
     testTimeout: 30_000,
     env: { NODE_ENV: 'test', LOG_LEVEL: 'silent' },
+    coverage: {
+      provider: 'v8',
+      include: ['src/modules/inventory/engine/**/*.ts'],
+      exclude: ['src/modules/inventory/engine/types.ts'],
+      reporter: ['text', 'json-summary'],
+      thresholds: { lines: 90, perFile: true },
+    },
   },
 });

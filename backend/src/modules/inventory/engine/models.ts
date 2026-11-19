@@ -91,6 +91,7 @@ const movementSchema = new Schema<StockMovementDoc>(
 );
 movementSchema.index({ idempotencyKey: 1, itemId: 1, locationId: 1 });
 movementSchema.index({ itemId: 1, locationId: 1, postedAt: -1, _id: -1 });
+movementSchema.index({ postedAt: 1, itemId: 1, locationId: 1 });
 movementSchema.index({ 'sourceDoc.type': 1, 'sourceDoc.id': 1 });
 
 export interface CostHistoryEntry {

@@ -234,6 +234,12 @@ calls. No module writes `stock_movements` or `cost_layers` directly.
   value: number /* cents */, lastMovementAt }
 ```
 
+Historical stock valuation uses each movement's recorded quantity and whole-cent
+`totalCost`, grouped by item and location through an inclusive UTC `postedAt`
+cutoff. A backdated FIFO `receivedAt` affects layer ordering but does not move
+the posting into an earlier valuation period. Late landed-cost revaluation is
+separate work and must supply its own auditable valuation effect.
+
 ### 5.2 Posting algorithm
 
 ```
@@ -272,6 +278,20 @@ thresholds are delivered, every adjustment requires approval. A different user
 must approve a request, except that an Admin may self-approve opening stock
 before any operational stock movement exists; the override remains in the audit trail.
 
+**Stock counts:** for an item and location, a Storekeeper freezes a
+book quantity and balance version, enters the physical quantity or serial set and reason, then
+a different Manager or Admin approves the result. The approver posts any
+variance as `COUNT_VARIANCE` through the FIFO engine. A surplus requires an
+explicit approved unit cost; a shortage consumes existing FIFO layers. If any
+stock posting changes the balance after the snapshot, posting the count fails
+and a new count is required. A matching count records completion without a
+stock movement. The snapshot does not block ordinary stock operations. For a
+serial-tracked item, the snapshot includes the book serial set. Missing serials
+post OUT and found serials post IN together in one transaction, even when the
+net quantity is unchanged. Found serials require an approved inbound unit cost;
+an existing serial already stocked elsewhere is rejected. The serial set and
+balance version must still match the snapshot when the count is posted.
+
 ### 5.3 Late landed cost (revaluation)
 
 When a landed-cost document is posted after the goods were received:
@@ -288,6 +308,11 @@ When a landed-cost document is posted after the goods were received:
 A nightly job (and an admin button) recomputes `onHand` and `value` per item and location
 from `stock_movements` and `cost_layers`, and flags any difference from
 `stock_balances`.
+
+The three collections must be read from one committed MongoDB snapshot so a
+concurrent posting cannot be mistaken for drift. A scheduler runs the read-only
+reconciliation command nightly; a nonzero result requires review rather than
+automatic balance repair.
 
 ---
 
@@ -549,7 +574,7 @@ only. Schedule `mongodump` backups from day one, and plan the paid tier before g
 | Auth | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` |
 | Users/roles | `GET/POST /users`, `PATCH /users/:id`, `GET/POST /roles` |
 | Items | `GET/POST /items`, `GET/PATCH /items/:id`, `GET /items/:id/stock`, `GET /items/:id/movements` |
-| Stock | `GET /inventory/balances`, `GET /inventory/items/:itemId/movements`, `POST /inventory/opening-stock`, `POST /inventory/adjustments`, `POST /inventory/movements/:movementId/reverse` (request creation), `GET /inventory/requests`, `POST /inventory/requests/:requestId/approve`, `POST /inventory/requests/:requestId/reject`, `POST /inventory/requests/:requestId/post`, `POST /inventory/transfers`; stock counts are pending |
+| Stock | `GET /inventory/balances`, `GET /inventory/valuation?asAt=...`, `GET /inventory/items/:itemId/movements`, `POST /inventory/opening-stock`, `POST /inventory/opening-stock/batches` (one reviewed, atomic request for up to 100 resolved item/location lines), `POST /inventory/adjustments`, `POST /inventory/movements/:movementId/reverse` (request creation), `GET /inventory/requests`, `POST /inventory/requests/:requestId/approve`, `POST /inventory/requests/:requestId/reject`, `POST /inventory/requests/:requestId/post`, `POST /inventory/transfers`; counts: `GET /inventory/counts`, `GET /inventory/counts/options/items`, `GET /inventory/counts/options/locations`, `GET /inventory/counts/:countId`, `POST /inventory/counts`, `PATCH /inventory/counts/:countId/entry` (quantity), `PATCH /inventory/counts/:countId/serial-entry` (serial set), `POST /inventory/counts/:countId/approve`, `POST /inventory/counts/:countId/reject`, `POST /inventory/counts/:countId/post` |
 | Purchasing | `/purchase-orders`, `/purchase-orders/:id/approve`, `/import-shipments`, `/grns`, `/grns/:id/post`, `/supplier-invoices`, `/landed-costs`, `/landed-costs/:id/post`, `/purchase-returns` |
 | Manufacturing | `/boms`, `/boms/:id/copy`, `/production-orders`, `/production-orders/:id/release`, `/:id/issue`, `/:id/complete`, `/:id/close` |
 | Sales | `/quotations`, `/quotations/:id/convert`, `/sales-orders`, `/delivery-notes`, `/delivery-notes/:id/post`, `/invoices`, `/invoices/:id/issue`, `/invoices/:id/pdf`, `/credit-notes`, `/cash-sales` |
@@ -560,6 +585,10 @@ only. Schedule `mongodump` backups from day one, and plan the paid tier before g
 | Dashboard | `GET /dashboard/kpis?from&to`, `GET /dashboard/charts/:name` |
 | eTIMS | `GET /etims/queue`, `POST /etims/queue/:id/retry`, `POST /etims/sync-lookups` |
 | Audit | `GET /audit-logs?entity&user&from&to` |
+
+Opening-stock sheets can submit `POST /inventory/opening-stock/imports` with up
+to 100 rows of existing item SKUs and location codes. The server resolves those
+references into one approved batch request; posting is one FIFO transaction.
 
 ---
 

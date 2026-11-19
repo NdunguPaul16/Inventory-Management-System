@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CostLayer,
   PostingRequest,
@@ -9,7 +9,14 @@ import {
   StockMovement,
 } from '../src/modules/inventory/engine/models.js';
 import {
+  assertStockInvariants,
+  getFifoLayers,
+  getMovementHistory,
+  getStockBalance,
+  listStockBalances,
+  postAdjustment,
   postIn,
+  postOpeningStock,
   postOut,
   reconcileBalances,
   reverse,
@@ -294,6 +301,266 @@ describe('FIFO stock engine', () => {
     expect(balance!.value).toBe(51);
     expect(layers.reduce((sum, layer) => sum + layer.remainingValue!, 0)).toBe(51);
     expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
+  });
+
+  it('reverses a fully available receipt and rejects reversal after consumption', async () => {
+    const first = await postOpeningStock(
+      input({ quantity: '2', movementType: 'OPENING', unitCost: 101 }),
+    );
+    const removed = await reverse({
+      movementId: first.movementIds[0]!,
+      postedBy: actorId,
+      idempotencyKey: key('reverse-receipt'),
+      reason: 'Incorrect receipt',
+    });
+    expect(removed.movements).toMatchObject([{ direction: 'OUT', quantity: '2', totalCost: 202 }]);
+    expect((await StockBalance.findOne({ itemId, locationId: sourceLocationId }))?.value).toBe(0);
+    expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
+
+    const second = await postIn(input({ quantity: '3', movementType: 'OPENING', unitCost: 103 }));
+    await postOut(input({ quantity: '1', movementType: 'SALE' }));
+    const before = await StockMovement.countDocuments();
+    await expect(
+      reverse({
+        movementId: second.movementIds[0]!,
+        postedBy: actorId,
+        idempotencyKey: key('partly-consumed'),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(await StockMovement.countDocuments()).toBe(before);
+    expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
+  });
+
+  it('reverses a multi-layer transfer without losing quantity, value or FIFO order', async () => {
+    const older = new Date('2026-01-01T00:00:00.000Z');
+    const newer = new Date('2026-02-01T00:00:00.000Z');
+    await postIn(
+      input({ quantity: '2', movementType: 'OPENING', unitCost: 101, receivedAt: older }),
+    );
+    await postIn(
+      input({ quantity: '3', movementType: 'OPENING', unitCost: 203, receivedAt: newer }),
+    );
+    const moved = await transfer({
+      itemId,
+      fromLocationId: sourceLocationId,
+      toLocationId: destinationLocationId,
+      quantity: '4',
+      sourceDoc: source('TRANSFER'),
+      postedBy: actorId,
+      idempotencyKey: key('transfer-reversal'),
+    });
+    expect(moved.movements).toHaveLength(3);
+    const undone = await reverse({
+      movementId: moved.movementIds[0]!,
+      postedBy: actorId,
+      idempotencyKey: key('undo-transfer'),
+    });
+    expect(undone.movements.map((entry) => entry.totalCost).sort()).toEqual([202, 202, 406, 406]);
+    const [sourceBalance, destinationBalance] = await Promise.all([
+      StockBalance.findOne({ itemId, locationId: sourceLocationId }).lean(),
+      StockBalance.findOne({ itemId, locationId: destinationLocationId }).lean(),
+    ]);
+    expect(amount(sourceBalance!.onHand)).toBe('5');
+    expect(sourceBalance!.value).toBe(811);
+    expect(amount(destinationBalance!.onHand)).toBe('0');
+    expect(destinationBalance!.value).toBe(0);
+    expect(await reconcileBalances()).toEqual({ checked: 2, differences: [] });
+    await expect(
+      reverse({
+        movementId: moved.movementIds[1]!,
+        postedBy: actorId,
+        idempotencyKey: key('undo-twice'),
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('keeps serial identities with stock through transfer, issue and reversal', async () => {
+    await Item.updateOne({ _id: itemId }, { $set: { trackSerial: true } });
+    const receipt = await postIn(
+      input({ quantity: '2', movementType: 'OPENING', serialNumbers: ['SER-A', 'SER-B'] }),
+    );
+    expect(await SerialNumber.countDocuments({ status: 'IN_STOCK' })).toBe(2);
+    await expect(
+      postIn(input({ quantity: '1', movementType: 'OPENING', serialNumbers: ['SER-A'] })),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await transfer({
+      itemId,
+      fromLocationId: sourceLocationId,
+      toLocationId: destinationLocationId,
+      quantity: '1',
+      sourceDoc: source('TRANSFER'),
+      postedBy: actorId,
+      idempotencyKey: key('serial-transfer'),
+      serialNumbers: ['SER-A'],
+    });
+    expect((await SerialNumber.findOne({ serialNo: 'SER-A' }))?.locationId).toEqual(
+      destinationLocationId,
+    );
+    const issue = await postOut(
+      input({
+        locationId: destinationLocationId,
+        quantity: '1',
+        movementType: 'SALE',
+        serialNumbers: ['SER-A'],
+      }),
+    );
+    expect((await SerialNumber.findOne({ serialNo: 'SER-A' }))?.status).toBe('ISSUED');
+    await reverse({
+      movementId: issue.movementIds[0]!,
+      postedBy: actorId,
+      idempotencyKey: key('serial-return'),
+    });
+    expect((await SerialNumber.findOne({ serialNo: 'SER-A' }))?.status).toBe('IN_STOCK');
+    expect(await SerialNumber.countDocuments({ status: 'IN_STOCK' })).toBe(2);
+    expect(await reconcileBalances()).toEqual({ checked: 2, differences: [] });
+    expect(receipt.movements[0]?.quantity).toBe('2');
+  });
+
+  it('marks serials issued when an untouched serialized receipt is reversed', async () => {
+    await Item.updateOne({ _id: itemId }, { $set: { trackSerial: true } });
+    const received = await postIn(
+      input({ quantity: '2', movementType: 'OPENING', serialNumbers: ['UNDO-A', 'UNDO-B'] }),
+    );
+    const undone = await reverse({
+      movementId: received.movementIds[0]!,
+      postedBy: actorId,
+      idempotencyKey: key('undo-serial-receipt'),
+    });
+    expect(undone.movements).toMatchObject([{ direction: 'OUT', quantity: '2' }]);
+    expect(await SerialNumber.countDocuments({ status: 'ISSUED' })).toBe(2);
+    expect((await StockBalance.findOne({ itemId, locationId: sourceLocationId }))?.value).toBe(0);
+    expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
+  });
+
+  it('detects ledger drift and returns filtered stock detail for review', async () => {
+    await postAdjustment({
+      ...input({ quantity: '3', movementType: 'ADJUSTMENT_IN', unitCost: 77 }),
+      direction: 'IN',
+      reason: 'Verified surplus',
+    });
+    const [balances, itemBalances, layers, history] = await Promise.all([
+      listStockBalances({ itemId: String(itemId) }),
+      getStockBalance(String(itemId), String(sourceLocationId)),
+      getFifoLayers(String(itemId), String(sourceLocationId)),
+      getMovementHistory(String(itemId), { locationId: String(sourceLocationId), limit: 1 }),
+    ]);
+    expect(balances).toHaveLength(1);
+    expect(itemBalances).toHaveLength(1);
+    expect(layers).toHaveLength(1);
+    expect(history).toHaveLength(1);
+    expect(await getMovementHistory(String(itemId), { before: String(history[0]!._id) })).toEqual(
+      [],
+    );
+    await expect(getMovementHistory(String(itemId), { before: 'invalid' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(await assertStockInvariants()).toEqual({ checked: 1, differences: [] });
+    await StockBalance.updateOne({ itemId, locationId: sourceLocationId }, { $inc: { value: 1 } });
+    const drift = await reconcileBalances();
+    expect(drift.differences).toHaveLength(1);
+    expect(drift.differences[0]).toMatchObject({
+      balanceValue: 232,
+      ledgerValue: 231,
+      layerValue: 231,
+    });
+    await expect(assertStockInvariants()).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('reconciles one snapshot while another stock receipt commits between ledger reads', async () => {
+    await postIn(input({ quantity: '1', movementType: 'OPENING', unitCost: 100 }));
+    const originalFind = CostLayer.find.bind(CostLayer);
+    let signalRead!: () => void;
+    let resumeRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      signalRead = resolve;
+    });
+    const resume = new Promise<void>((resolve) => {
+      resumeRead = resolve;
+    });
+    const findSpy = vi.spyOn(CostLayer, 'find').mockImplementation((() => {
+      const query = originalFind();
+      const originalCursor = query.cursor.bind(query);
+      query.cursor = (() => {
+        const cursor = originalCursor();
+        const originalNext = cursor.next.bind(cursor);
+        let first = true;
+        cursor.next = (async () => {
+          if (first) {
+            first = false;
+            signalRead();
+            await resume;
+          }
+          return originalNext();
+        }) as typeof cursor.next;
+        return cursor;
+      }) as typeof query.cursor;
+      return query;
+    }) as typeof CostLayer.find);
+
+    try {
+      const checking = reconcileBalances();
+      await readStarted;
+      await postIn(input({ quantity: '1', movementType: 'GRN', unitCost: 100 }));
+      resumeRead();
+      expect(await checking).toEqual({ checked: 1, differences: [] });
+    } finally {
+      resumeRead();
+      findSpy.mockRestore();
+    }
+    expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
+  });
+
+  it('reconciles records across cursor batches and detects drift in the last movement', async () => {
+    const now = new Date();
+    const fixtures = Array.from({ length: 205 }, (_, index) => {
+      const layerId = new Types.ObjectId();
+      const sourceDoc = { type: 'TEST', id: `bulk-${index}`, number: `BULK-${index}` };
+      return {
+        layer: {
+          _id: layerId,
+          itemId,
+          locationId: sourceLocationId,
+          sourceDoc,
+          receivedAt: now,
+          originalQty: Types.Decimal128.fromString('1'),
+          remainingQty: Types.Decimal128.fromString('1'),
+          originalValue: 100,
+          remainingValue: 100,
+          unitCost: 100,
+        },
+        movement: {
+          movementNo: `BULK-${index}`,
+          itemId,
+          locationId: sourceLocationId,
+          direction: 'IN' as const,
+          quantity: Types.Decimal128.fromString('1'),
+          movementType: 'OPENING' as const,
+          unitCost: 100,
+          totalCost: 100,
+          layerCreated: layerId,
+          sourceDoc,
+          idempotencyKey: `bulk-${index}`,
+          postedAt: now,
+          postedBy: actorId,
+        },
+      };
+    });
+    await Promise.all([
+      CostLayer.insertMany(fixtures.map(({ layer }) => layer)),
+      StockMovement.insertMany(fixtures.map(({ movement }) => movement)),
+      StockBalance.create({
+        itemId,
+        locationId: sourceLocationId,
+        onHand: Types.Decimal128.fromString('205'),
+        value: 20_500,
+      }),
+    ]);
+
+    expect(await reconcileBalances()).toEqual({ checked: 1, differences: [] });
+    await StockMovement.updateOne({ movementNo: 'BULK-204' }, { $set: { totalCost: 101 } });
+    expect((await reconcileBalances()).differences).toMatchObject([
+      { balanceQty: '205', ledgerQty: '205', layerQty: '205', ledgerValue: 20_501 },
+    ]);
   });
 
   it('replays an idempotent request without posting another movement', async () => {

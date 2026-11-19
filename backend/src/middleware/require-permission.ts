@@ -43,3 +43,15 @@ export function requirePermission(permission: string): RequestHandler {
     return next();
   };
 }
+
+/** A read-only selector can serve several inventory workflows without broadening writes. */
+export function requireAnyPermission(...permissions: string[]): RequestHandler {
+  return (_req, res, next) => {
+    const auth = res.locals.auth;
+    if (!auth) return next(AppError.unauthenticated('Sign in is required'));
+    if (!permissions.some((permission) => hasPermission(auth.permissions, permission))) {
+      return next(AppError.forbidden());
+    }
+    return next();
+  };
+}

@@ -19,6 +19,7 @@ import {
 import type {
   MovementResult,
   PostInput,
+  SerialCountVarianceInput,
   SourceDocument,
   StockMovementType,
   TransferInput,
@@ -236,6 +237,49 @@ async function lockBalance(
   return balance;
 }
 
+/** A count with no variance still needs a balance write to exclude concurrent postings. */
+export async function lockUnchangedCountBalance(
+  itemId: string,
+  locationId: string,
+  bookVersion: number,
+  bookQuantity: string,
+  session: ClientSession,
+): Promise<void> {
+  const balance = await lockBalance(
+    objectId(itemId, 'itemId'),
+    objectId(locationId, 'locationId'),
+    session,
+  );
+  if (
+    balance.version !== bookVersion + 1 ||
+    !asDecimal(balance.onHand).equals(new Quantity(bookQuantity))
+  ) {
+    throw AppError.conflict('Stock changed after the count was frozen; start a new count');
+  }
+}
+
+/** Called inside the posting transaction after the count variance movement. */
+export async function assertCountPostingBalance(
+  itemId: string,
+  locationId: string,
+  bookVersion: number,
+  countedQuantity: string,
+  session: ClientSession,
+  movementCount = 1,
+): Promise<void> {
+  const balance = await StockBalance.findOne({
+    itemId: objectId(itemId, 'itemId'),
+    locationId: objectId(locationId, 'locationId'),
+  }).session(session);
+  if (
+    !balance ||
+    balance.version !== bookVersion + movementCount ||
+    !asDecimal(balance.onHand).equals(new Quantity(countedQuantity))
+  ) {
+    throw AppError.conflict('Stock changed after the count was frozen; start a new count');
+  }
+}
+
 async function validateContext(
   itemId: Types.ObjectId,
   locationId: Types.ObjectId,
@@ -389,7 +433,7 @@ async function createInbound(
           status: 'IN_STOCK',
           lastMovementId: movement._id,
         })),
-        { session },
+        { session, ordered: true },
       );
     }
   }
@@ -558,12 +602,141 @@ export async function postIn(input: PostInput, onPosted?: PostingHook): Promise<
   );
 }
 
+/** Post a reviewed opening sheet as one idempotent, all-or-nothing ledger operation. */
+export async function postOpeningStockBatch(
+  lines: Omit<PostInput, 'movementType' | 'idempotencyKey'>[],
+  idempotencyKey: string,
+  onPosted?: PostingHook,
+): Promise<MovementResult> {
+  if (lines.length < 1 || lines.length > 100) {
+    throw AppError.badRequest('Opening-stock batch must contain 1 to 100 lines');
+  }
+  const normalized = lines.map((line) => ({
+    ...line,
+    quantity: parseQuantity(line.quantity).toString(),
+  }));
+  return idempotentTransaction(
+    idempotencyKey,
+    fingerprint({ direction: 'IN', movementType: 'OPENING', lines: normalized }),
+    async (session) => {
+      const movements: StockMovementDoc[] = [];
+      for (const line of lines) {
+        movements.push(
+          await createInbound({ ...line, movementType: 'OPENING', idempotencyKey }, session),
+        );
+      }
+      return movements;
+    },
+    onPosted,
+  );
+}
+
 export async function postOut(input: PostInput, onPosted?: PostingHook): Promise<MovementResult> {
   const normalized = { ...input, quantity: parseQuantity(input.quantity).toString() };
   return idempotentTransaction(
     input.idempotencyKey,
     fingerprint({ direction: 'OUT', ...normalized }),
     async (session) => [await consumeFifo(input, session)],
+    onPosted,
+  );
+}
+
+/** Apply a serial count's missing and unexpected sets in one FIFO transaction. */
+export async function postSerialCountVariance(
+  input: SerialCountVarianceInput,
+  onPosted?: PostingHook,
+): Promise<MovementResult> {
+  const missingSerials = serialList(
+    true,
+    new Quantity(input.missingSerials.length),
+    input.missingSerials,
+  ).sort();
+  const addedSerials = serialList(
+    true,
+    new Quantity(input.addedSerials.length),
+    input.addedSerials,
+  ).sort();
+  const addedSet = new Set(addedSerials);
+  if (
+    missingSerials.length + addedSerials.length === 0 ||
+    missingSerials.length > 10_000 ||
+    addedSerials.length > 10_000 ||
+    missingSerials.some((serial) => addedSet.has(serial))
+  ) {
+    throw AppError.badRequest('Serial count requires distinct missing or found serial numbers');
+  }
+  if (!input.reason.trim()) throw AppError.badRequest('Serial count variance reason is required');
+  if (
+    addedSerials.length > 0 &&
+    (!Number.isSafeInteger(input.inboundUnitCost) || (input.inboundUnitCost as number) < 0)
+  ) {
+    throw AppError.badRequest('Approved inbound unit cost is required for found serials');
+  }
+  if (addedSerials.length === 0 && input.inboundUnitCost !== undefined) {
+    throw AppError.badRequest('Inbound unit cost applies only to found serials');
+  }
+  validateSource(input.sourceDoc);
+  return idempotentTransaction(
+    input.idempotencyKey,
+    fingerprint({ ...input, missingSerials, addedSerials }),
+    async (session) => {
+      const itemId = objectId(input.itemId, 'itemId');
+      const locationId = objectId(input.locationId, 'locationId');
+      const item = await validateContext(itemId, locationId, session);
+      if (!item.trackSerial) throw AppError.badRequest('Item does not track serial numbers');
+      const movements: StockMovementDoc[] = [];
+      const base = {
+        itemId,
+        locationId,
+        sourceDoc: input.sourceDoc,
+        postedBy: input.postedBy,
+        idempotencyKey: input.idempotencyKey,
+        reason: input.reason,
+      };
+      if (missingSerials.length > 0) {
+        movements.push(
+          await consumeFifo(
+            {
+              ...base,
+              movementType: 'COUNT_VARIANCE',
+              quantity: String(missingSerials.length),
+              serialNumbers: missingSerials,
+            },
+            session,
+          ),
+        );
+      }
+      if (addedSerials.length > 0) {
+        const existing = await SerialNumber.find({ serialNo: { $in: addedSerials } })
+          .session(session)
+          .lean();
+        if (
+          existing.some((serial) => !serial.itemId.equals(itemId) || serial.status !== 'ISSUED')
+        ) {
+          throw AppError.conflict('One or more found serials already exist in stock');
+        }
+        const previouslyIssued = new Set(existing.map((serial) => serial.serialNo));
+        for (const group of [
+          addedSerials.filter((serial) => previouslyIssued.has(serial)),
+          addedSerials.filter((serial) => !previouslyIssued.has(serial)),
+        ]) {
+          if (group.length === 0) continue;
+          movements.push(
+            await createInbound(
+              {
+                ...base,
+                movementType: 'COUNT_VARIANCE',
+                quantity: String(group.length),
+                unitCost: input.inboundUnitCost,
+                serialNumbers: group,
+              },
+              session,
+            ),
+          );
+        }
+      }
+      return movements;
+    },
     onPosted,
   );
 }
@@ -891,16 +1064,14 @@ export async function getMovementHistory(
   return StockMovement.find(filter).sort({ _id: -1 }).limit(limit).lean();
 }
 
-export async function reconcileBalances() {
-  const balances = await StockBalance.find().lean();
-  const layers = await CostLayer.find().lean();
-  const movements = await StockMovement.find().lean();
-  const balanceMap = new Map(
-    balances.map((balance) => [`${balance.itemId}:${balance.locationId}`, balance]),
-  );
+async function reconcileBalancesInSession(session: ClientSession) {
+  const balanceMap = new Map<string, { onHand: Types.Decimal128; value: number }>();
+  for await (const balance of StockBalance.find().session(session).lean().cursor()) {
+    balanceMap.set(`${balance.itemId}:${balance.locationId}`, balance);
+  }
   const layerMap = new Map<string, { quantity: Decimal; value: number }>();
   const movementMap = new Map<string, { quantity: Decimal; value: number }>();
-  for (const layer of layers) {
+  for await (const layer of CostLayer.find().session(session).lean().cursor()) {
     const key = `${layer.itemId}:${layer.locationId}`;
     const aggregate = layerMap.get(key) ?? { quantity: new Quantity(0), value: 0 };
     const quantity = asDecimal(layer.remainingQty);
@@ -908,7 +1079,7 @@ export async function reconcileBalances() {
     aggregate.value = addCents(aggregate.value, remainingLayerValue(layer));
     layerMap.set(key, aggregate);
   }
-  for (const movement of movements) {
+  for await (const movement of StockMovement.find().session(session).lean().cursor()) {
     const key = `${movement.itemId}:${movement.locationId}`;
     const aggregate = movementMap.get(key) ?? { quantity: new Quantity(0), value: 0 };
     const quantity = asDecimal(movement.quantity);
@@ -956,6 +1127,20 @@ export async function reconcileBalances() {
     }
   }
   return { checked: allKeys.size, differences };
+}
+
+/** Compare all three ledger views at one committed MongoDB snapshot. */
+export async function reconcileBalances() {
+  const session = await mongoose.startSession();
+  try {
+    const result = await session.withTransaction(() => reconcileBalancesInSession(session), {
+      readConcern: { level: 'snapshot' },
+    });
+    if (!result) throw new Error('Stock reconciliation did not complete');
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function postOpeningStock(

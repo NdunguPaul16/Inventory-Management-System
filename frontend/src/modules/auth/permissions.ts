@@ -19,7 +19,11 @@ export function visibleNavigation(sections: NavSection[], user: AuthUser): NavSe
   return sections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => canAccess(user, item.permission)),
+      items: section.items.filter(
+        (item) =>
+          canAccess(user, item.permission) &&
+          (!item.anyOf || item.anyOf.some((permission) => canAccess(user, permission))),
+      ),
     }))
     .filter((section) => section.items.length > 0);
 }

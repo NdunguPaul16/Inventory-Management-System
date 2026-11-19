@@ -8,6 +8,7 @@ export interface NavLinkItem {
   path: string;
   phase: number;
   permission?: string;
+  anyOf?: string[];
 }
 
 export interface NavSection {
@@ -61,10 +62,16 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: 'inventory.balances.read',
       },
       {
+        label: 'Opening stock',
+        path: '/inventory/opening-stock',
+        phase: 2,
+        anyOf: ['inventory.opening.request', 'inventory.requests.read'],
+      },
+      {
         label: 'Adjustments',
         path: '/inventory/adjustments',
         phase: 2,
-        permission: 'inventory.adjustments.request',
+        anyOf: ['inventory.requests.read', 'inventory.adjustments.request'],
       },
       {
         label: 'Transfers',
@@ -75,6 +82,12 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: 'Stock counts',
         path: '/inventory/counts',
+        phase: 2,
+        permission: 'inventory.counts.read',
+      },
+      {
+        label: 'Reconciliation',
+        path: '/inventory/reconciliation',
         phase: 2,
         permission: 'inventory.reconciliation.read',
       },
