@@ -162,10 +162,12 @@ Backend:
 - [x] `stock_movements`, `cost_layers`, `stock_balances`, `serial_numbers` models + indexes (local)
 - [x] Negative-stock guard; idempotency keys on posting endpoints (local)
 - [x] **Opening stock** import (CSV/Excel → validated → posted as `OPENING` layers) (local)
-- [ ] Stock adjustments with approval workflow (§12 thresholds)
+- [x] Stock adjustment request → separate approval → posting workflow (local)
+- [ ] Configurable adjustment and count-variance value thresholds (§12; Phase 1 settings prerequisite)
 - [x] Stock transfers between locations (FIFO layers preserved) (local)
 - [x] Stock counts: freeze → count entry → variance review → post `COUNT_VARIANCE` (local)
-- [ ] Reconciliation job (§5.4) + admin endpoint
+- [x] Read-only reconciliation command and permission-gated endpoint (§5.4) (local)
+- [ ] Nightly scheduling, alert delivery and representative-volume staging run
 - [x] Queries: balances by item/location, movement history, layer view, valuation as at date (local)
 
 Frontend:
