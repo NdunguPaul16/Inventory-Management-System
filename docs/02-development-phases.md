@@ -67,10 +67,10 @@ Tasks:
 **Goal:** secure access and the master data every later module needs. (§4, §12)
 
 Backend:
-- [ ] Users, roles, permissions (seed default roles from §12)
-- [ ] Login / refresh / logout / me; argon2 hashing; lockout; JWT + httpOnly refresh cookie
-- [ ] RBAC middleware `requirePermission('items.create')`
-- [ ] Audit log service + middleware (§17)
+- [x] Users, roles and permissions with seeded default roles (§12; existing local API)
+- [x] Login / refresh / logout / me; argon2 hashing; lockout; JWT + httpOnly refresh cookie (existing local API; staging security hardening is on a separate branch)
+- [x] RBAC middleware with permission-gated routes (existing local API)
+- [ ] Audit log service exists and sensitive writes use it; general audit middleware and the staging Audit History work have not been integrated into this branch (§17)
 - [ ] Settings: company profile, logo, numbering formats, approval thresholds, base currency
 - [ ] Master data CRUD: categories, units + conversions, locations, currencies and exchange rates, tax categories, payment methods, customer groups
 - [ ] Items CRUD with all fields in §4.2 (incl. item type, serial tracking, KRA codes as placeholders)

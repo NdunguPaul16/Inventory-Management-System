@@ -29,7 +29,8 @@ results do not establish deployed behavior or representative-volume performance.
 ## Prerequisites for staging acceptance
 
 1. Provide Phase 1 item and location management or an approved, audited way to
-   create the test master data. Item/location models alone do not provide CRUD.
+   create the test master data. The existing item/location models and stock
+   reference selectors do not provide create or edit routes.
 2. Preserve the decided stock approval policy: every adjustment and count
    variance needs a **different Manager or Admin** approver, regardless of
    amount. No stock-specific threshold changes approval authority. The broader
