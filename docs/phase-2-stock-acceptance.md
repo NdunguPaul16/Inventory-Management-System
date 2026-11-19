@@ -47,6 +47,10 @@ results do not establish deployed behavior or representative-volume performance.
 5. Define representative item/location, layer and movement volumes and an
    acceptable completion time before testing. These values must come from the
    expected operation, not a guessed test fixture.
+6. Paginate the stock-balance API and its two frontend consumers before
+   representative-volume acceptance. The shared query validates `before` and
+   `limit`, but `listStockBalances` currently ignores both and returns every
+   matching balance; the balances page paginates only in browser memory.
 
 ## Stock workflow acceptance
 
