@@ -99,6 +99,7 @@ export const rejectStockActionSchema = z.object({
 export const stockQuerySchema = z.object({
   itemId: objectIdSchema.optional(),
   locationId: objectIdSchema.optional(),
+  q: z.string().trim().max(100).default(''),
   before: objectIdSchema.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });

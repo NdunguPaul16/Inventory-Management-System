@@ -1058,14 +1058,40 @@ export async function getStockBalance(itemId: string, locationId?: string) {
     .lean();
 }
 
-export async function listStockBalances(options: { itemId?: string; locationId?: string } = {}) {
-  const filter: Record<string, Types.ObjectId> = {};
+export async function listStockBalances(
+  options: {
+    itemId?: string;
+    locationId?: string;
+    q?: string;
+    before?: string;
+    limit?: number;
+  } = {},
+) {
+  const filter: Record<string, unknown> = {};
   if (options.itemId) filter.itemId = objectId(options.itemId, 'itemId');
   if (options.locationId) filter.locationId = objectId(options.locationId, 'locationId');
+  if (options.before) filter._id = { $lt: objectId(options.before, 'before') };
+  if (options.q) {
+    const escaped = options.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(escaped, 'i');
+    const [items, locations] = await Promise.all([
+      Item.find({ $or: [{ sku: match }, { name: match }] })
+        .select('_id')
+        .lean(),
+      Location.find({ $or: [{ code: match }, { name: match }] })
+        .select('_id')
+        .lean(),
+    ]);
+    filter.$or = [
+      { itemId: { $in: items.map((item) => item._id) } },
+      { locationId: { $in: locations.map((location) => location._id) } },
+    ];
+  }
   return StockBalance.find(filter)
     .populate('itemId', 'sku name type baseUnit')
     .populate('locationId', 'code name type')
-    .sort({ itemId: 1, locationId: 1 })
+    .sort({ _id: -1 })
+    .limit(Math.max(1, Math.min(options.limit ?? 50, 200)))
     .lean();
 }
 

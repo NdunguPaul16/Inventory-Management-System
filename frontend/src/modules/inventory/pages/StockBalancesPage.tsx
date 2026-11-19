@@ -1,24 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Card, PageHeader } from '../../../components/Card';
 import { formatDateTime } from '../../../lib/format';
 import { useAuth } from '../../auth/auth-context';
-import { getBalances } from '../api/balances';
+import { BALANCE_PAGE_SIZE, getBalances } from '../api/balances';
 
-const PAGE_SIZE = 20;
 const money = new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' });
 
 export function StockBalancesPage() {
   const { authorizedRequest } = useAuth();
-  const balances = useQuery({
-    queryKey: ['inventory', 'balances'],
-    queryFn: ({ signal }) => getBalances(authorizedRequest, signal),
-    retry: false,
-  });
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState('all');
-  const [page, setPage] = useState(1);
+  const [cursors, setCursors] = useState<string[]>([]);
+  const before = cursors.at(-1);
+  const balances = useQuery({
+    queryKey: ['inventory', 'balances', search, location, before],
+    queryFn: ({ signal }) =>
+      getBalances(authorizedRequest, signal, {
+        q: search,
+        ...(location === 'all' ? {} : { locationId: location }),
+        before,
+      }),
+    retry: false,
+  });
 
   const locations = useMemo(() => {
     const unique = new Map(
@@ -26,21 +32,13 @@ export function StockBalancesPage() {
     );
     return [...unique.values()].sort((a, b) => a.code.localeCompare(b.code));
   }, [balances.data]);
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (balances.data ?? []).filter(
-      (balance) =>
-        (location === 'all' || balance.locationId._id === location) &&
-        (!term ||
-          `${balance.itemId.sku} ${balance.itemId.name} ${balance.locationId.code} ${balance.locationId.name}`
-            .toLowerCase()
-            .includes(term)),
-    );
-  }, [balances.data, search, location]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const totalValue = filtered.reduce((sum, balance) => sum + balance.value, 0);
+  const visible = balances.data ?? [];
+  const totalValue = visible.reduce((sum, balance) => sum + balance.value, 0);
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearch(searchInput.trim());
+    setCursors([]);
+  }
 
   return (
     <>
@@ -49,7 +47,7 @@ export function StockBalancesPage() {
         description="On-hand quantities and FIFO value by item and location."
       />
       <Card>
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <form onSubmit={submitSearch} className="mb-4 grid gap-3 sm:grid-cols-2">
           <div>
             <label
               htmlFor="balance-search"
@@ -60,11 +58,8 @@ export function StockBalancesPage() {
             <input
               id="balance-search"
               type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
               placeholder="SKU, item or location"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
             />
@@ -81,7 +76,7 @@ export function StockBalancesPage() {
               value={location}
               onChange={(event) => {
                 setLocation(event.target.value);
-                setPage(1);
+                setCursors([]);
               }}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             >
@@ -93,7 +88,13 @@ export function StockBalancesPage() {
               ))}
             </select>
           </div>
-        </div>
+          <button
+            type="submit"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium"
+          >
+            Search all balances
+          </button>
+        </form>
         {balances.isPending ? (
           <p role="status" className="py-10 text-center text-sm text-slate-500">
             Loading stock balances…
@@ -109,11 +110,9 @@ export function StockBalancesPage() {
               Retry
             </button>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : visible.length === 0 ? (
           <p className="py-10 text-center text-sm text-slate-500">
-            {balances.data.length === 0
-              ? 'No stock balances have been posted yet.'
-              : 'No stock balances match your filters.'}
+            No stock balances match this page or filter.
           </p>
         ) : (
           <>
@@ -175,24 +174,25 @@ export function StockBalancesPage() {
             </div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600">
               <p>
-                {filtered.length} balances · FIFO value {money.format(totalValue / 100)}
+                {visible.length} balances on this page · FIFO value {money.format(totalValue / 100)}
               </p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setPage(currentPage - 1)}
-                  disabled={currentPage === 1}
+                  onClick={() => setCursors(cursors.slice(0, -1))}
+                  disabled={cursors.length === 0 || balances.isFetching}
                   className="rounded-lg border border-slate-300 px-3 py-1.5 disabled:opacity-40"
                 >
                   Previous
                 </button>
-                <span>
-                  Page {currentPage} of {pageCount}
-                </span>
+                <span>Page {cursors.length + 1}</span>
                 <button
                   type="button"
-                  onClick={() => setPage(currentPage + 1)}
-                  disabled={currentPage === pageCount}
+                  onClick={() => {
+                    const last = visible.at(-1);
+                    if (last) setCursors([...cursors, last._id]);
+                  }}
+                  disabled={visible.length < BALANCE_PAGE_SIZE || balances.isFetching}
                   className="rounded-lg border border-slate-300 px-3 py-1.5 disabled:opacity-40"
                 >
                   Next

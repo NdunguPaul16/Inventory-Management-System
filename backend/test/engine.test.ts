@@ -466,6 +466,34 @@ describe('FIFO stock engine', () => {
     await expect(assertStockInvariants()).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
+  it('paginates and searches stock balances before populating records', async () => {
+    await postIn(input({ quantity: '1', movementType: 'OPENING', unitCost: 100 }));
+    await postIn(
+      input({
+        locationId: destinationLocationId,
+        quantity: '2',
+        movementType: 'OPENING',
+        unitCost: 75,
+        idempotencyKey: key('balance-page-2'),
+      }),
+    );
+    const first = await listStockBalances({ itemId: String(itemId), limit: 1 });
+    expect(first).toHaveLength(1);
+    const second = await listStockBalances({
+      itemId: String(itemId),
+      limit: 1,
+      before: String(first[0]!._id),
+    });
+    expect(second).toHaveLength(1);
+    expect(String(second[0]!._id)).not.toBe(String(first[0]!._id));
+    expect(await listStockBalances({ q: 'no such item' })).toEqual([]);
+    expect(await listStockBalances({ q: 'Source' })).toHaveLength(1);
+    expect(await listStockBalances({ q: 'Test inventory' })).toHaveLength(2);
+    expect(
+      await listStockBalances({ locationId: String(sourceLocationId), limit: 1 }),
+    ).toHaveLength(1);
+  });
+
   it('reconciles one snapshot while another stock receipt commits between ledger reads', async () => {
     await postIn(input({ quantity: '1', movementType: 'OPENING', unitCost: 100 }));
     const originalFind = CostLayer.find.bind(CostLayer);

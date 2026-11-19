@@ -28,13 +28,24 @@ const balanceSchema = z.object({
 const balancesResponseSchema = apiSuccessSchema(z.array(balanceSchema));
 export type BalanceRecord = z.infer<typeof balanceSchema>;
 
+export const BALANCE_PAGE_SIZE = 20;
+
 export async function getBalances(
   request: AuthContextValue['authorizedRequest'],
   signal?: AbortSignal,
-  itemId?: string,
+  options: {
+    itemId?: string;
+    locationId?: string;
+    q?: string;
+    before?: string;
+    limit?: number;
+  } = {},
 ): Promise<BalanceRecord[]> {
-  const path = itemId
-    ? `/inventory/balances?itemId=${encodeURIComponent(itemId)}`
-    : '/inventory/balances';
+  const params = new URLSearchParams({ limit: String(options.limit ?? BALANCE_PAGE_SIZE) });
+  if (options.itemId) params.set('itemId', options.itemId);
+  if (options.locationId) params.set('locationId', options.locationId);
+  if (options.q) params.set('q', options.q);
+  if (options.before) params.set('before', options.before);
+  const path = `/inventory/balances?${params}`;
   return (await request(path, balancesResponseSchema, { signal })).data;
 }

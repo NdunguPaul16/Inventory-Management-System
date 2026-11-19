@@ -1,12 +1,12 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { objectIdSchema } from '@ims/shared';
 import { Card, PageHeader } from '../../../components/Card';
 import { formatDateTime } from '../../../lib/format';
 import { useAuth } from '../../auth/auth-context';
 import { canAccess } from '../../auth/permissions';
-import { getBalances } from '../api/balances';
+import { BALANCE_PAGE_SIZE, getBalances } from '../api/balances';
 import { getItemLayers, getItemMovements } from '../api/stock-detail';
 
 type Tab = 'stock' | 'layers' | 'movements';
@@ -31,19 +31,47 @@ export function ItemStockPage() {
   const canViewLayers = Boolean(user && canAccess(user, 'inventory.layers.read'));
   const canViewMovements = Boolean(user && canAccess(user, 'inventory.movements.read'));
   const [tab, setTab] = useState<Tab>('stock');
-  const balances = useQuery({
+  const requestedLocationId = searchParams.get('locationId');
+  const balances = useInfiniteQuery({
     queryKey: ['inventory', 'balances', validItemId],
-    queryFn: ({ signal }) => {
+    queryFn: ({ signal, pageParam }) => {
       if (!validItemId) throw new Error('Invalid item id');
-      return getBalances(authorizedRequest, signal, validItemId);
+      return getBalances(authorizedRequest, signal, { itemId: validItemId, before: pageParam });
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.length === BALANCE_PAGE_SIZE ? lastPage.at(-1)?._id : undefined,
     enabled: Boolean(validItemId),
     retry: false,
   });
-  const requestedLocationId = searchParams.get('locationId');
+  const loadedBalances = useMemo(() => balances.data?.pages.flat() ?? [], [balances.data]);
+  const selectedBalance = useQuery({
+    queryKey: ['inventory', 'balance', validItemId, requestedLocationId],
+    queryFn: ({ signal }) => {
+      if (!validItemId || !requestedLocationId) throw new Error('Item and location are required');
+      return getBalances(authorizedRequest, signal, {
+        itemId: validItemId,
+        locationId: requestedLocationId,
+        limit: 1,
+      });
+    },
+    enabled: Boolean(
+      validItemId &&
+      requestedLocationId &&
+      balances.isSuccess &&
+      !loadedBalances.some((balance) => balance.locationId._id === requestedLocationId),
+    ),
+    retry: false,
+  });
+  const balanceRows = useMemo(() => {
+    const selected = selectedBalance.data?.[0];
+    return selected && !loadedBalances.some((balance) => balance._id === selected._id)
+      ? [...loadedBalances, selected]
+      : loadedBalances;
+  }, [loadedBalances, selectedBalance.data]);
   const locationId =
-    balances.data?.find((balance) => balance.locationId._id === requestedLocationId)?.locationId
-      ._id ?? balances.data?.[0]?.locationId._id;
+    balanceRows.find((balance) => balance.locationId._id === requestedLocationId)?.locationId._id ??
+    balanceRows[0]?.locationId._id;
   const layers = useQuery({
     queryKey: ['inventory', 'layers', validItemId, locationId],
     queryFn: ({ signal }) => {
@@ -64,7 +92,7 @@ export function ItemStockPage() {
     enabled: Boolean(validItemId && locationId && canViewMovements && tab === 'movements'),
     retry: false,
   });
-  const item = balances.data?.[0]?.itemId;
+  const item = balanceRows[0]?.itemId;
 
   if (!validItemId)
     return <PageHeader title="Invalid item" description="Choose an item from stock balances." />;
@@ -91,7 +119,7 @@ export function ItemStockPage() {
         <Card>
           <QueryError retry={() => void balances.refetch()} />
         </Card>
-      ) : balances.data.length === 0 ? (
+      ) : balanceRows.length === 0 ? (
         <Card>
           <p className="py-8 text-sm text-slate-600">No posted stock balances for this item.</p>
         </Card>
@@ -134,7 +162,7 @@ export function ItemStockPage() {
                   onChange={(event) => setSearchParams({ locationId: event.target.value })}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
                 >
-                  {balances.data.map((balance) => (
+                  {balanceRows.map((balance) => (
                     <option key={balance.locationId._id} value={balance.locationId._id}>
                       {balance.locationId.code} — {balance.locationId.name}
                     </option>
@@ -163,7 +191,7 @@ export function ItemStockPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {balances.data.map((balance) => (
+                  {balanceRows.map((balance) => (
                     <tr key={balance._id} className="border-b border-slate-100 last:border-0">
                       <td className="py-3">
                         {balance.locationId.code} — {balance.locationId.name}
@@ -181,6 +209,16 @@ export function ItemStockPage() {
                   ))}
                 </tbody>
               </table>
+              {balances.hasNextPage && (
+                <button
+                  type="button"
+                  onClick={() => void balances.fetchNextPage()}
+                  disabled={balances.isFetchingNextPage}
+                  className="mt-4 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium disabled:opacity-50"
+                >
+                  {balances.isFetchingNextPage ? 'Loading…' : 'Load more locations'}
+                </button>
+              )}
             </div>
           )}
           {tab === 'layers' &&

@@ -6,7 +6,7 @@ import { healthBody, jsonResponse, renderRoute, sessionBody, testUser } from './
 const ITEM_ID = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 const LOCATION_ID = 'bbbbbbbbbbbbbbbbbbbbbbbb';
 const ITEM_URL = `/inventory/items/${ITEM_ID}/stock?locationId=${LOCATION_ID}`;
-const BALANCES_PATH = `/api/v1/inventory/balances?itemId=${ITEM_ID}`;
+const BALANCES_PATH = `/api/v1/inventory/balances?limit=20&itemId=${ITEM_ID}`;
 const LAYERS_PATH = `/api/v1/inventory/items/${ITEM_ID}/layers?locationId=${LOCATION_ID}`;
 const MOVEMENTS_PATH = `/api/v1/inventory/items/${ITEM_ID}/movements?locationId=${LOCATION_ID}&limit=50`;
 
