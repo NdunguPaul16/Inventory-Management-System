@@ -136,7 +136,7 @@ transfer and reversal tests cover value conservation; a full valuation report
 and late landed-cost effects remain later-phase work.
 The backend now enforces a per-file 90% line-coverage gate for the FIFO engine
 through `npm run test:engine:coverage -w backend`. The latest local result is
-90.72% engine lines and 90.21% for `service.ts` (95 backend tests); branch coverage
+90.72% engine lines and 90.21% for `service.ts` (101 backend tests); branch coverage
 is 79.4%, so this does not establish comprehensive branch coverage. A serial
 receipt regression test also exposed and corrected a Mongoose transaction
 option required when creating multiple serial records. These changes have not
