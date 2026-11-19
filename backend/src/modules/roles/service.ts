@@ -14,6 +14,8 @@ export const DEFAULT_ROLES: Array<
     permissions: [
       'dashboard.read',
       'reports.read',
+      'inventory.items.read',
+      'inventory.locations.read',
       'inventory.balances.read',
       'inventory.layers.read',
       'inventory.movements.read',
@@ -50,6 +52,8 @@ export const DEFAULT_ROLES: Array<
     name: 'Storekeeper',
     description: 'Stock receiving, transfers and counts',
     permissions: [
+      'inventory.items.read',
+      'inventory.locations.read',
       'inventory.balances.read',
       'inventory.layers.read',
       'inventory.movements.read',

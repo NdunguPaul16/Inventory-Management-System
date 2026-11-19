@@ -56,6 +56,8 @@ import {
 } from './count-service.js';
 import { listActiveStockItems, listCountableItems, listCountLocations } from './count-options.js';
 import { getStockValuationAsAt } from './valuation-service.js';
+import { itemRoutes } from './items/routes.js';
+import { locationRoutes } from './locations/routes.js';
 
 const itemParams = z.object({ itemId: z.string().regex(/^[a-f\d]{24}$/i) });
 const movementParams = z.object({ movementId: z.string().regex(/^[a-f\d]{24}$/i) });
@@ -81,6 +83,9 @@ function permissions(res: Response): readonly string[] {
 }
 
 export const inventoryRoutes = Router();
+
+inventoryRoutes.use('/items', itemRoutes);
+inventoryRoutes.use('/locations', locationRoutes);
 
 const requireStockApproverRole: RequestHandler = (_req, res, next) => {
   if (!res.locals.authUser || !isSystemStockApprover(res.locals.authUser)) {

@@ -1,13 +1,7 @@
 import { Schema, model } from 'mongoose';
+import { ITEM_TYPES } from '@ims/shared';
 
-export const ITEM_TYPES = [
-  'RAW_MATERIAL',
-  'COMPONENT',
-  'FINISHED_GOOD',
-  'TRADING_GOOD',
-  'CONSUMABLE',
-  'SERVICE',
-] as const;
+export { ITEM_TYPES } from '@ims/shared';
 export type ItemType = (typeof ITEM_TYPES)[number];
 
 export interface ItemDoc {

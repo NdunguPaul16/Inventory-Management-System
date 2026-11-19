@@ -13,6 +13,7 @@ import { StockTransfersPage } from '../modules/inventory/pages/StockTransfersPag
 import { StockAdjustmentsPage } from '../modules/inventory/pages/StockAdjustmentsPage';
 import { OpeningStockPage } from '../modules/inventory/pages/OpeningStockPage';
 import { StockReconciliationPage } from '../modules/inventory/pages/StockReconciliationPage';
+import { MasterDataPage } from '../modules/inventory/pages/MasterDataPage';
 import { AppLayout } from './AppLayout';
 import { PLACEHOLDER_ROUTES, SYSTEM_STATUS_PATH } from './navigation';
 
@@ -26,6 +27,22 @@ export const routes: RouteObject[] = [
         element: <AppLayout />,
         children: [
           { path: SYSTEM_STATUS_PATH, element: <SystemStatusPage /> },
+          {
+            path: '/inventory/items',
+            element: (
+              <PermissionGate permission="inventory.items.read">
+                <MasterDataPage kind="items" />
+              </PermissionGate>
+            ),
+          },
+          {
+            path: '/inventory/locations',
+            element: (
+              <PermissionGate permission="inventory.locations.read">
+                <MasterDataPage kind="locations" />
+              </PermissionGate>
+            ),
+          },
           {
             path: '/settings/users',
             element: (
@@ -105,6 +122,8 @@ export const routes: RouteObject[] = [
                 '/settings/users',
                 '/settings/roles',
                 '/inventory/balances',
+                '/inventory/items',
+                '/inventory/locations',
                 '/inventory/counts',
                 '/inventory/reconciliation',
                 '/inventory/transfers',

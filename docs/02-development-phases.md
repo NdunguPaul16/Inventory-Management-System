@@ -72,13 +72,13 @@ Backend:
 - [x] RBAC middleware with permission-gated routes (existing local API)
 - [ ] Audit log service exists and sensitive writes use it; general audit middleware and the staging Audit History work have not been integrated into this branch (§17)
 - [ ] Settings: company profile, logo, numbering formats, approval thresholds, base currency
-- [ ] Master data CRUD: categories, units + conversions, locations, currencies and exchange rates, tax categories, payment methods, customer groups
-- [ ] Items CRUD with all fields in §4.2 (incl. item type, serial tracking, KRA codes as placeholders)
+- [ ] Master data CRUD: operational location CRUD is implemented locally; categories, units + conversions, currencies and exchange rates, tax categories, payment methods, customer groups remain pending
+- [ ] Items CRUD with all fields in §4.2: operational item CRUD, type and serial/batch tracking are implemented locally; the remaining specification fields, including KRA placeholders, remain pending
 
 Frontend:
 - [x] Login page, protected routes, permission-aware menu (Phase 1A on `dfstock`)
 - [x] Users & roles admin (Phase 1B on `dfstock`); settings pages remain
-- [ ] Master data screens; items list (search, filters, pagination) and item form
+- [x] Local item and location screens with search, status filtering, cursor pagination, create and edit forms; staging acceptance pending
 
 **Acceptance criteria:**
 - Users without a permission get `403` from the API and don't see the menu item.

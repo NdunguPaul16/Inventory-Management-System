@@ -28,19 +28,20 @@ results do not establish deployed behavior or representative-volume performance.
 
 ## Prerequisites for staging acceptance
 
-1. Provide Phase 1 item and location management or an approved, audited way to
-   create the test master data. The existing item/location models and stock
-   reference selectors do not provide create or edit routes.
+1. Review the local item and location management prerequisite before staging.
+   It provides permission-gated create, list, search, edit and status routes,
+   matching screens, and transactional audit records. Stocked identities cannot
+   be changed or deactivated. Confirm the seeded role permissions after rollout
+   and create only disposable staging master data with separate approval. The
+   broader Phase 1 item fields, categories and unit conversions remain pending.
 2. Preserve the decided stock approval policy: every adjustment and count
    variance needs a **different Manager or Admin** approver, regardless of
    amount. No stock-specific threshold changes approval authority. The broader
    Phase 1 settings module is still pending for other business settings.
 3. Confirm a dedicated staging MongoDB replica set, database name and least
    privilege account. Keep credentials out of commands, logs and source control.
-4. Integrate and review the approved dependency remediation before deployment:
-   this local Phase 2 worktree still locks Mongoose `9.10.3`, while the staging
-   security branch specifies `9.11.4`. Do not treat this worktree's passing
-   tests as a dependency-security sign-off.
+4. Review the local Mongoose `9.11.4` dependency commit before integration.
+   Local installation and tests do not establish the deployed dependency version.
 5. Define representative item/location, layer and movement volumes and an
    acceptable completion time before testing. These values must come from the
    expected operation, not a guessed test fixture.
@@ -97,6 +98,7 @@ resource use, exit code and differences. Verify a single committed snapshot is
 used so concurrent postings do not cause false drift. Do not use these data or
 measurements as a reason to change production capacity without review.
 
-Phase 2 release remains pending until the master-data prerequisite, staging
-workflow checks, scheduled alert delivery and representative-volume result are
-recorded. Passing local tests alone is not a release decision.
+Phase 2 release remains pending until the master-data prerequisite is reviewed
+and integrated, staging workflow checks, scheduled alert delivery and the
+representative-volume result are recorded. Passing local tests alone is not a
+release decision.

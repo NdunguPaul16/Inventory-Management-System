@@ -1,0 +1,304 @@
+import { randomUUID } from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import type { Types } from 'mongoose';
+import request from 'supertest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuditLog } from '../src/modules/audit/model.js';
+import { Counter } from '../src/modules/counters/model.js';
+import {
+  CostLayer,
+  PostingRequest,
+  StockBalance,
+  StockMovement,
+} from '../src/modules/inventory/engine/models.js';
+import { postIn } from '../src/modules/inventory/engine/service.js';
+import { Item } from '../src/modules/inventory/items/model.js';
+import { Location } from '../src/modules/inventory/locations/model.js';
+import { Role } from '../src/modules/roles/model.js';
+import { DEFAULT_ROLES } from '../src/modules/roles/service.js';
+import { User } from '../src/modules/users/model.js';
+import { createTestApp } from './helpers.js';
+
+const app = createTestApp();
+let adminToken: string;
+let storekeeperToken: string;
+let adminId: Types.ObjectId;
+
+function token(id: Types.ObjectId) {
+  return `Bearer ${jwt.sign({ type: 'access' }, 'test-access-token-secret-that-is-at-least-32-characters', { subject: String(id), expiresIn: 60 })}`;
+}
+
+beforeAll(async () => {
+  await Promise.all(
+    [
+      AuditLog,
+      Counter,
+      Item,
+      Location,
+      Role,
+      User,
+      StockBalance,
+      StockMovement,
+      CostLayer,
+      PostingRequest,
+    ].map((model) => model.createCollection()),
+  );
+  await Promise.all(
+    [Item, Location, Role, User, StockBalance, StockMovement, CostLayer, PostingRequest].map(
+      (model) => model.syncIndexes(),
+    ),
+  );
+});
+
+beforeEach(async () => {
+  await Promise.all([
+    AuditLog.deleteMany({}),
+    Counter.deleteMany({}),
+    Item.deleteMany({}),
+    Location.deleteMany({}),
+    Role.deleteMany({}),
+    User.deleteMany({}),
+    StockBalance.deleteMany({}),
+    StockMovement.deleteMany({}),
+    CostLayer.deleteMany({}),
+    PostingRequest.deleteMany({}),
+  ]);
+  const [adminRole, storeRole] = await Role.create([
+    DEFAULT_ROLES.find((role) => role.name === 'Admin')!,
+    DEFAULT_ROLES.find((role) => role.name === 'Storekeeper')!,
+  ]);
+  if (!adminRole || !storeRole) throw new Error('Roles were not created');
+  const [admin, storekeeper] = await User.create([
+    {
+      name: 'Master Data Admin',
+      email: 'master-admin@example.com',
+      passwordHash: 'unused',
+      roleIds: [adminRole._id],
+    },
+    {
+      name: 'Stock Keeper',
+      email: 'master-store@example.com',
+      passwordHash: 'unused',
+      roleIds: [storeRole._id],
+    },
+  ]);
+  if (!admin || !storekeeper) throw new Error('Users were not created');
+  adminId = admin._id;
+  adminToken = token(admin._id);
+  storekeeperToken = token(storekeeper._id);
+});
+
+describe('inventory item and location management', () => {
+  it('creates, searches and updates audited master data without weakening Stockkeeper permissions', async () => {
+    const item = await request(app)
+      .post('/api/v1/inventory/items')
+      .set('Authorization', adminToken)
+      .send({ sku: ' cue-01 ', name: 'Pool cue', type: 'TRADING_GOOD', baseUnit: 'pcs' })
+      .expect(201);
+    expect(item.body.data).toMatchObject({
+      sku: 'CUE-01',
+      baseUnit: 'PCS',
+      trackSerial: false,
+      isActive: true,
+    });
+    const location = await request(app)
+      .post('/api/v1/inventory/locations')
+      .set('Authorization', adminToken)
+      .send({ code: ' main-wh ', name: 'Main warehouse', type: 'WAREHOUSE' })
+      .expect(201);
+    expect(location.body.data.code).toBe('MAIN-WH');
+    const itemId = item.body.data.id as string;
+    const locationId = location.body.data.id as string;
+    const itemSearch = await request(app)
+      .get('/api/v1/inventory/items?q=CUE&status=active')
+      .set('Authorization', storekeeperToken)
+      .expect(200);
+    expect(itemSearch.body.data.map((entry: { id: string }) => entry.id)).toEqual([itemId]);
+    const locationSearch = await request(app)
+      .get('/api/v1/inventory/locations?q=warehouse')
+      .set('Authorization', storekeeperToken)
+      .expect(200);
+    expect(locationSearch.body.data.map((entry: { id: string }) => entry.id)).toEqual([locationId]);
+    await request(app)
+      .post('/api/v1/inventory/items')
+      .set('Authorization', storekeeperToken)
+      .send({ sku: 'DENIED', name: 'Denied item', type: 'TRADING_GOOD', baseUnit: 'PCS' })
+      .expect(403);
+    await request(app)
+      .patch(`/api/v1/inventory/locations/${locationId}`)
+      .set('Authorization', storekeeperToken)
+      .send({ name: 'Denied edit' })
+      .expect(403);
+    const updated = await request(app)
+      .patch(`/api/v1/inventory/items/${itemId}`)
+      .set('Authorization', adminToken)
+      .send({ name: 'Premium pool cue' })
+      .expect(200);
+    expect(updated.body.data).toMatchObject({
+      sku: 'CUE-01',
+      name: 'Premium pool cue',
+      trackSerial: false,
+    });
+    expect(
+      (
+        await AuditLog.find({ entityType: { $in: ['item', 'location'] } })
+          .sort({ at: 1 })
+          .lean()
+      ).map((entry) => entry.action),
+    ).toEqual(['item.create', 'location.create', 'item.update']);
+  });
+
+  it('rejects duplicate identities and malformed or empty updates', async () => {
+    const input = { sku: 'DUP-1', name: 'First item', type: 'COMPONENT', baseUnit: 'PCS' };
+    const created = await request(app)
+      .post('/api/v1/inventory/items')
+      .set('Authorization', adminToken)
+      .send(input)
+      .expect(201);
+    await request(app)
+      .post('/api/v1/inventory/items')
+      .set('Authorization', adminToken)
+      .send(input)
+      .expect(409);
+    await request(app)
+      .patch(`/api/v1/inventory/items/${created.body.data.id}`)
+      .set('Authorization', adminToken)
+      .send({})
+      .expect(400);
+    await request(app)
+      .post('/api/v1/inventory/locations')
+      .set('Authorization', adminToken)
+      .send({ code: 'BAD', name: 'Wrong', type: 'NOT_A_LOCATION' })
+      .expect(400);
+  });
+
+  it('paginates items and allows deactivation only before any stock movement', async () => {
+    const first = await request(app)
+      .post('/api/v1/inventory/items')
+      .set('Authorization', adminToken)
+      .send({
+        sku: 'PAGE-1',
+        name: 'First item',
+        type: 'TRADING_GOOD',
+        baseUnit: 'PCS',
+        trackSerial: true,
+      })
+      .expect(201);
+    const second = await request(app)
+      .post('/api/v1/inventory/items')
+      .set('Authorization', adminToken)
+      .send({ sku: 'PAGE-2', name: 'Second item', type: 'TRADING_GOOD', baseUnit: 'PCS' })
+      .expect(201);
+    const newest = await request(app)
+      .get('/api/v1/inventory/items?limit=1')
+      .set('Authorization', storekeeperToken)
+      .expect(200);
+    expect(newest.body.data.map((record: { id: string }) => record.id)).toEqual([
+      second.body.data.id,
+    ]);
+    const older = await request(app)
+      .get(`/api/v1/inventory/items?limit=1&before=${second.body.data.id}`)
+      .set('Authorization', storekeeperToken)
+      .expect(200);
+    expect(older.body.data.map((record: { id: string }) => record.id)).toEqual([
+      first.body.data.id,
+    ]);
+    const inactive = await request(app)
+      .patch(`/api/v1/inventory/items/${first.body.data.id}`)
+      .set('Authorization', adminToken)
+      .send({ isActive: false })
+      .expect(200);
+    expect(inactive.body.data).toMatchObject({ isActive: false, trackSerial: true });
+    const filtered = await request(app)
+      .get('/api/v1/inventory/items?status=inactive')
+      .set('Authorization', storekeeperToken)
+      .expect(200);
+    expect(filtered.body.data.map((record: { id: string }) => record.id)).toEqual([
+      first.body.data.id,
+    ]);
+    await request(app)
+      .get('/api/v1/inventory/items')
+      .set(
+        'Authorization',
+        token(
+          (
+            await User.create({
+              name: 'No Access',
+              email: 'no-access@example.com',
+              passwordHash: 'unused',
+              roleIds: [],
+            })
+          )._id,
+        ),
+      )
+      .expect(403);
+  });
+
+  it('protects stocked identities while allowing descriptive edits', async () => {
+    const item = await Item.create({
+      sku: 'STOCKED-1',
+      name: 'Stocked item',
+      type: 'TRADING_GOOD',
+      baseUnit: 'PCS',
+    });
+    const location = await Location.create({
+      code: 'STOCKED-WH',
+      name: 'Stocked warehouse',
+      type: 'WAREHOUSE',
+    });
+    await postIn({
+      itemId: item._id,
+      locationId: location._id,
+      quantity: '1',
+      unitCost: 125,
+      movementType: 'OPENING',
+      sourceDoc: { type: 'TEST', id: randomUUID(), number: 'TEST-1' },
+      postedBy: adminId,
+      idempotencyKey: randomUUID(),
+    });
+    for (const change of [
+      { sku: 'CHANGED' },
+      { type: 'SERVICE' },
+      { baseUnit: 'KG' },
+      { trackSerial: true },
+      { isActive: false },
+    ]) {
+      await request(app)
+        .patch(`/api/v1/inventory/items/${item._id}`)
+        .set('Authorization', adminToken)
+        .send(change)
+        .expect(409);
+    }
+    for (const change of [{ code: 'CHANGED' }, { type: 'SHOWROOM' }, { isActive: false }]) {
+      await request(app)
+        .patch(`/api/v1/inventory/locations/${location._id}`)
+        .set('Authorization', adminToken)
+        .send(change)
+        .expect(409);
+    }
+    await request(app)
+      .patch(`/api/v1/inventory/locations/${location._id}`)
+      .set('Authorization', adminToken)
+      .send({ name: 'Updated warehouse' })
+      .expect(200);
+    expect(
+      (await StockBalance.findOne({ itemId: item._id, locationId: location._id }))?.value,
+    ).toBe(125);
+  });
+
+  it('rolls back item creation when its audit record fails', async () => {
+    const auditFailure = vi
+      .spyOn(AuditLog, 'create')
+      .mockRejectedValueOnce(new Error('simulated audit failure'));
+    try {
+      await request(app)
+        .post('/api/v1/inventory/items')
+        .set('Authorization', adminToken)
+        .send({ sku: 'ROLLBACK', name: 'Rollback item', type: 'TRADING_GOOD', baseUnit: 'PCS' })
+        .expect(500);
+    } finally {
+      auditFailure.mockRestore();
+    }
+    expect(await Item.countDocuments({ sku: 'ROLLBACK' })).toBe(0);
+  });
+});
