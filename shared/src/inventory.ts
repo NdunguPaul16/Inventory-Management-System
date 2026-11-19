@@ -104,6 +104,12 @@ export const stockQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
+export const stockLayerQuerySchema = z.object({
+  locationId: objectIdSchema,
+  before: objectIdSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
 /** Historical stock is valued at the time each movement was posted, in UTC. */
 export const stockValuationQuerySchema = z.object({
   asAt: z.iso.datetime(),

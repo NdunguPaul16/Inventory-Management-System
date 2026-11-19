@@ -1095,12 +1095,35 @@ export async function listStockBalances(
     .lean();
 }
 
-export async function getFifoLayers(itemId: string, locationId: string) {
-  return CostLayer.find({
-    itemId: objectId(itemId, 'itemId'),
-    locationId: objectId(locationId, 'locationId'),
-  })
+export async function getFifoLayers(
+  itemId: string,
+  locationId: string,
+  options: { before?: string; limit?: number } = {},
+) {
+  const itemObjectId = objectId(itemId, 'itemId');
+  const locationObjectId = objectId(locationId, 'locationId');
+  const filter: Record<string, unknown> = {
+    itemId: itemObjectId,
+    locationId: locationObjectId,
+  };
+  if (options.before) {
+    const cursor = await CostLayer.findOne({
+      _id: objectId(options.before, 'before'),
+      itemId: itemObjectId,
+      locationId: locationObjectId,
+    })
+      .select('receivedAt')
+      .lean();
+    if (!cursor)
+      throw AppError.badRequest('before must refer to a layer at this item and location');
+    filter.$or = [
+      { receivedAt: { $gt: cursor.receivedAt } },
+      { receivedAt: cursor.receivedAt, _id: { $gt: cursor._id } },
+    ];
+  }
+  return CostLayer.find(filter)
     .sort({ receivedAt: 1, _id: 1 })
+    .limit(Math.max(1, Math.min(options.limit ?? 50, 200)))
     .lean();
 }
 

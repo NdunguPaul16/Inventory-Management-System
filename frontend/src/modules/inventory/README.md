@@ -2,7 +2,7 @@
 
 The stock balances page reads the existing permission-gated balance API and displays
 quantities and FIFO value by item and location. Each item links to stock detail tabs
-for balances, FIFO layers, and cursor-paged movement history. The backend remains
+for balances, cursor-paged FIFO layers, and cursor-paged movement history. The backend remains
 authoritative for access control and stock posting.
 
 The reconciliation page is available to users with

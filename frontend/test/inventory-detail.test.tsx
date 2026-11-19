@@ -7,10 +7,10 @@ const ITEM_ID = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 const LOCATION_ID = 'bbbbbbbbbbbbbbbbbbbbbbbb';
 const ITEM_URL = `/inventory/items/${ITEM_ID}/stock?locationId=${LOCATION_ID}`;
 const BALANCES_PATH = `/api/v1/inventory/balances?limit=20&itemId=${ITEM_ID}`;
-const LAYERS_PATH = `/api/v1/inventory/items/${ITEM_ID}/layers?locationId=${LOCATION_ID}`;
+const LAYERS_PATH = `/api/v1/inventory/items/${ITEM_ID}/layers?locationId=${LOCATION_ID}&limit=50`;
 const MOVEMENTS_PATH = `/api/v1/inventory/items/${ITEM_ID}/movements?locationId=${LOCATION_ID}&limit=50`;
 
-function mockDetailApi(permissions: string[], firstMovementPageSize = 1) {
+function mockDetailApi(permissions: string[], firstMovementPageSize = 1, firstLayerPageSize = 2) {
   const user = testUser(permissions);
   const fetchMock = vi.fn(async (url: string) => {
     if (url === '/api/v1/auth/refresh') return jsonResponse(200, sessionBody(user));
@@ -37,28 +37,22 @@ function mockDetailApi(permissions: string[], firstMovementPageSize = 1) {
         ],
         meta: {},
       });
-    if (url === LAYERS_PATH)
+    if (url.startsWith(LAYERS_PATH))
       return jsonResponse(200, {
-        data: [
-          {
-            _id: 'dddddddddddddddddddddddd',
-            receivedAt: '2026-11-18T08:00:00.000Z',
-            originalQty: { $numberDecimal: '2.5' },
-            remainingQty: { $numberDecimal: '2.5' },
-            originalValue: 12_500,
-            remainingValue: 12_500,
-            unitCost: 5000,
-            sourceDoc: { type: 'TEST', id: 'receipt-1', number: 'TEST-1' },
+        data: Array.from({ length: url === LAYERS_PATH ? firstLayerPageSize : 1 }, (_, index) => ({
+          _id: String(url === LAYERS_PATH ? index + 1 : 51).padStart(24, '0'),
+          receivedAt: '2026-11-18T08:00:00.000Z',
+          originalQty: { $numberDecimal: '2.5' },
+          remainingQty: { $numberDecimal: '2.5' },
+          originalValue: 12_500,
+          remainingValue: 12_500,
+          unitCost: 5000,
+          sourceDoc: {
+            type: 'TEST',
+            id: `receipt-${index + 1}`,
+            number: url === LAYERS_PATH ? `TEST-${index + 1}` : 'TEST-LATER',
           },
-          {
-            _id: 'ffffffffffffffffffffffff',
-            receivedAt: '2026-11-01T08:00:00.000Z',
-            originalQty: { $numberDecimal: '1' },
-            remainingQty: { $numberDecimal: '0' },
-            unitCost: 5000,
-            sourceDoc: { type: 'TEST', id: 'receipt-old', number: 'TEST-OLD' },
-          },
-        ],
+        })),
         meta: {},
       });
     if (url.startsWith(MOVEMENTS_PATH))
@@ -100,7 +94,7 @@ describe('item stock detail', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'FIFO layers' }));
     expect(await screen.findByText('TEST-1')).toBeInTheDocument();
-    expect(screen.getByText('Unavailable')).toBeInTheDocument();
+    expect(screen.getByText('TEST-2')).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => url === LAYERS_PATH)).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => url === MOVEMENTS_PATH)).toBe(false);
 
@@ -131,6 +125,22 @@ describe('item stock detail', () => {
     expect(
       fetchMock.mock.calls.some(
         ([url]) => url === `${MOVEMENTS_PATH}&before=${String(51).padStart(24, '0')}`,
+      ),
+    ).toBe(true);
+  });
+
+  it('loads a second FIFO layer page only after an explicit click', async () => {
+    const fetchMock = mockDetailApi(['inventory.balances.read', 'inventory.layers.read'], 1, 50);
+    renderRoute(ITEM_URL);
+    await screen.findByRole('heading', { name: /CUE-001.*Pool cue/ });
+    await userEvent.click(screen.getByRole('tab', { name: 'FIFO layers' }));
+    await screen.findByText('TEST-50');
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('&before='))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Load later FIFO layers' }));
+    expect(await screen.findByText('TEST-LATER')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => url === `${LAYERS_PATH}&before=${String(50).padStart(24, '0')}`,
       ),
     ).toBe(true);
   });

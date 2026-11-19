@@ -494,6 +494,38 @@ describe('FIFO stock engine', () => {
     ).toHaveLength(1);
   });
 
+  it('pages FIFO layers in receipt order, including equal timestamps', async () => {
+    for (let index = 0; index < 3; index += 1) {
+      await postIn(input({ quantity: '1', movementType: 'OPENING' }));
+    }
+    await CostLayer.updateMany(
+      { itemId, locationId: sourceLocationId },
+      { $set: { receivedAt: new Date('2026-11-18T08:00:00.000Z') } },
+    );
+    const first = await getFifoLayers(String(itemId), String(sourceLocationId), { limit: 2 });
+    expect(first).toHaveLength(2);
+    const second = await getFifoLayers(String(itemId), String(sourceLocationId), {
+      before: String(first[1]!._id),
+      limit: 2,
+    });
+    expect(second).toHaveLength(1);
+    expect(new Set([...first, ...second].map((layer) => String(layer._id))).size).toBe(3);
+    expect(
+      await getFifoLayers(String(itemId), String(sourceLocationId), {
+        before: String(second[0]!._id),
+        limit: 2,
+      }),
+    ).toEqual([]);
+    await expect(
+      getFifoLayers(String(itemId), String(sourceLocationId), { before: 'invalid' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      getFifoLayers(String(itemId), String(destinationLocationId), {
+        before: String(first[0]!._id),
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
   it('reconciles one snapshot while another stock receipt commits between ledger reads', async () => {
     await postIn(input({ quantity: '1', movementType: 'OPENING', unitCost: 100 }));
     const originalFind = CostLayer.find.bind(CostLayer);

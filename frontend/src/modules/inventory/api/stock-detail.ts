@@ -29,14 +29,16 @@ export type MovementRecord = z.infer<typeof movementSchema>;
 
 const layerResponseSchema = apiSuccessSchema(z.array(layerSchema));
 const movementResponseSchema = apiSuccessSchema(z.array(movementSchema));
+export const LAYER_PAGE_SIZE = 50;
 
 export async function getItemLayers(
   request: AuthContextValue['authorizedRequest'],
   itemId: string,
   locationId: string,
   signal?: AbortSignal,
+  before?: string,
 ): Promise<LayerRecord[]> {
-  const path = `/inventory/items/${encodeURIComponent(itemId)}/layers?locationId=${encodeURIComponent(locationId)}`;
+  const path = `/inventory/items/${encodeURIComponent(itemId)}/layers?locationId=${encodeURIComponent(locationId)}&limit=${LAYER_PAGE_SIZE}${before ? `&before=${encodeURIComponent(before)}` : ''}`;
   return (await request(path, layerResponseSchema, { signal })).data;
 }
 

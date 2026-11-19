@@ -16,6 +16,7 @@ import {
   stockCountOptionQuerySchema,
   stockReferenceQuerySchema,
   stockQuerySchema,
+  stockLayerQuerySchema,
   stockValuationQuerySchema,
   transferSchema,
   z,
@@ -146,12 +147,15 @@ inventoryRoutes.get(
   requirePermission('inventory.layers.read'),
   validate({
     params: itemParams,
-    query: z.object({ locationId: z.string().regex(/^[a-f\d]{24}$/i) }),
+    query: stockLayerQuerySchema,
   }),
   async (_req, res) => {
     const params = res.locals.validated?.params as z.infer<typeof itemParams>;
-    const query = res.locals.validated?.query as { locationId: string };
-    res.json({ data: await getFifoLayers(params.itemId, query.locationId), meta: {} });
+    const query = res.locals.validated?.query as z.infer<typeof stockLayerQuerySchema>;
+    res.json({
+      data: await getFifoLayers(params.itemId, query.locationId, query),
+      meta: {},
+    });
   },
 );
 

@@ -156,8 +156,11 @@ nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
 and nightly-operation gates.
 Nightly scheduling, alert delivery and a representative-volume run remain
 deployment tasks. No reconciliation result automatically changes stock.
-The complete local suite currently passes 183 tests across shared, backend and
+The complete local suite currently passes 197 tests across shared, backend and
 frontend; this is not staging acceptance evidence.
+The FIFO layer API and item detail now page layers in receipt order, with a
+bounded query and an explicit load-more action. Representative-volume staging
+validation remains pending.
 Stock action approval, rejection and posting now check the caller's operation
 permission before request lookup, and filter request types by that permission.
 The API also requires an active system Admin or Owner / Manager role before

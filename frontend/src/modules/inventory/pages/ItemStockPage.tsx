@@ -7,7 +7,7 @@ import { formatDateTime } from '../../../lib/format';
 import { useAuth } from '../../auth/auth-context';
 import { canAccess } from '../../auth/permissions';
 import { BALANCE_PAGE_SIZE, getBalances } from '../api/balances';
-import { getItemLayers, getItemMovements } from '../api/stock-detail';
+import { getItemLayers, getItemMovements, LAYER_PAGE_SIZE } from '../api/stock-detail';
 
 type Tab = 'stock' | 'layers' | 'movements';
 const money = new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' });
@@ -72,12 +72,15 @@ export function ItemStockPage() {
   const locationId =
     balanceRows.find((balance) => balance.locationId._id === requestedLocationId)?.locationId._id ??
     balanceRows[0]?.locationId._id;
-  const layers = useQuery({
+  const layers = useInfiniteQuery({
     queryKey: ['inventory', 'layers', validItemId, locationId],
-    queryFn: ({ signal }) => {
+    queryFn: ({ signal, pageParam }) => {
       if (!validItemId || !locationId) throw new Error('Item and location are required');
-      return getItemLayers(authorizedRequest, validItemId, locationId, signal);
+      return getItemLayers(authorizedRequest, validItemId, locationId, signal, pageParam);
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.length === LAYER_PAGE_SIZE ? lastPage.at(-1)?._id : undefined,
     enabled: Boolean(validItemId && locationId && canViewLayers && tab === 'layers'),
     retry: false,
   });
@@ -229,7 +232,7 @@ export function ItemStockPage() {
               </p>
             ) : layers.isError ? (
               <QueryError retry={() => void layers.refetch()} />
-            ) : layers.data.length === 0 ? (
+            ) : layers.data.pages[0]?.length === 0 ? (
               <p className="py-8 text-sm text-slate-600">No FIFO layers at this location.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -254,7 +257,7 @@ export function ItemStockPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {layers.data.map((layer) => (
+                    {layers.data.pages.flat().map((layer) => (
                       <tr key={layer._id} className="border-b border-slate-100 last:border-0">
                         <td className="py-3">{formatDateTime(layer.receivedAt)}</td>
                         <td className="py-3">{layer.sourceDoc.number}</td>
@@ -273,6 +276,16 @@ export function ItemStockPage() {
                     ))}
                   </tbody>
                 </table>
+                {layers.hasNextPage && (
+                  <button
+                    type="button"
+                    onClick={() => void layers.fetchNextPage()}
+                    disabled={layers.isFetchingNextPage}
+                    className="mt-4 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                  >
+                    {layers.isFetchingNextPage ? 'Loading…' : 'Load later FIFO layers'}
+                  </button>
+                )}
               </div>
             ))}
           {tab === 'movements' &&
