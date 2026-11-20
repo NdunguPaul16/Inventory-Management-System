@@ -42,7 +42,10 @@ describe('staging deployment configuration', () => {
     );
     expect(vercel.outputDirectory).toBe('dist');
     expect(vercel.routes).toBeUndefined();
-    expect(vercel.git.deploymentEnabled).toEqual({ 'staging/security-audit': false });
+    expect(vercel.git.deploymentEnabled).toEqual({
+      'staging/security-audit': false,
+      'integration/phase-2-security': false,
+    });
     expect(vercel.rewrites).toEqual([
       {
         source: '/api/:path*',
