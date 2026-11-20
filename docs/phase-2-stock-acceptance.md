@@ -30,6 +30,23 @@ compiled `reconcile:stock` job is tested against an in-memory replica set for a
 clean ledger, a one-cent difference and missing database configuration. Local
 results do not establish deployed behavior or representative-volume performance.
 
+## Branch and deployment boundary
+
+`phase-2/stock-counts` descends directly from `dfstock` and is the stock-code
+review branch. Its `frontend/vercel.json` disables automatic Git deployments for
+that exact branch so a push for CI cannot create a Preview that routes to the
+production backend. Confirm both connected Vercel projects still use `frontend`
+as their Root Directory and verify no Preview was created after any approved
+push. This checked-in rule does not suppress other branch names.
+
+The separate local `integration/phase-2-security` branch combines Phase 2 with
+staging-only authentication and a staging API rewrite for compatibility tests.
+It must **not** be merged wholesale into `dfstock`. Stage Phase 2 by reviewing
+its merge into `staging/security-audit` only after the signed-login gateway's
+backend-first rollout and rollback controls are approved. Promote stock code to
+`dfstock` from the stock review branch after staging acceptance, CI and a
+separately approved production release sequence.
+
 ## Prerequisites for staging acceptance
 
 1. Review the local item and location management prerequisite before staging.
