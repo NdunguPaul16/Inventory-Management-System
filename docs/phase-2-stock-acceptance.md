@@ -38,6 +38,19 @@ also has a local regression proving that an `ims` database target fails the
 isolation preflight before the job connects. The integration branch has not been
 pushed or deployed.
 
+## Branch and deployment boundary
+
+`integration/phase-2-security` combines the stock review branch with temporary
+staging login-gateway code and a staging API rewrite. It is a staging validation
+candidate, **not** a production merge source. Promote stock changes to `dfstock`
+from `phase-2/stock-counts` after staging acceptance and a separate production
+review. The integration branch's `frontend/vercel.json` disables automatic Git
+deployments for both its own exact branch name and `staging/security-audit`; it
+does not disable other branches. Before any approved push, confirm the connected
+Vercel projects still use `frontend` as Root Directory and that the applicable
+branch rule prevents an automatic Preview. A manual protected Preview and the
+backend-first gateway release need separate authorization and coordination.
+
 ## Prerequisites for staging acceptance
 
 1. Review the local item and location management prerequisite before staging.
