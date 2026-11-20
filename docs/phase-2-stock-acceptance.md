@@ -47,6 +47,12 @@ installed local MongoDB binary and run
 `node backend/scripts/benchmark-stock-reconciliation.mjs` from the repository
 root. The script creates its own database and does not read a deployed URI.
 
+The separate `backend/scripts/verify-reconciliation-read-role.mjs` check passed
+locally on 2026-11-20: an authenticated in-memory MongoDB user with only
+`read@ims_staging` ran the compiled reconciliation job and was denied a stock
+write. This establishes a feasible least-privilege database role for the job;
+actual staging Atlas privileges and host isolation still need verification.
+
 ## Branch and deployment boundary
 
 `phase-2/stock-counts` descends directly from `dfstock` and is the stock-code
