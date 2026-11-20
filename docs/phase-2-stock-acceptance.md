@@ -30,6 +30,23 @@ compiled `reconcile:stock` job is tested against an in-memory replica set for a
 clean ledger, a one-cent difference and missing database configuration. Local
 results do not establish deployed behavior or representative-volume performance.
 
+On 2026-11-20, the stock review branch's
+`backend/scripts/benchmark-stock-reconciliation.mjs` created a disposable local
+in-memory replica set with the agreed launch baseline: 1,000 SKUs, 5 locations,
+5,000 balances, 20,000 FIFO layers and 100,000 historical movements. The
+read-only reconciliation checked all 5,000 balances and found zero differences
+in two runs (3,934 and 3,857 ms). Peak Node.js process RSS was 467 and 511 MiB,
+respectively; this excludes the MongoDB process. The script inserts synthetic
+consistent records directly and
+measures neither posting throughput nor Atlas/Render performance. Its three
+sample page queries examined 50 balance documents, 4 FIFO layer documents and
+50 movement documents. This is preliminary local evidence, **not** the
+15-minute staging acceptance result or a basis for choosing Cron memory alone.
+To repeat it, build the backend, set `MONGOMS_SYSTEM_BINARY` to an already
+installed local MongoDB binary and run
+`node backend/scripts/benchmark-stock-reconciliation.mjs` from the repository
+root. The script creates its own database and does not read a deployed URI.
+
 ## Branch and deployment boundary
 
 `phase-2/stock-counts` descends directly from `dfstock` and is the stock-code
@@ -66,9 +83,9 @@ separately approved production release sequence.
    privilege account. Keep credentials out of commands, logs and source control.
 4. Review the local Mongoose `9.11.4` dependency commit before integration.
    Local installation and tests do not establish the deployed dependency version.
-5. Define representative item/location, layer and movement volumes and an
-   acceptable completion time before testing. These values must come from the
-   expected operation, not a guessed test fixture.
+5. Use the agreed launch baseline of 1,000 SKUs, 5 locations, 20,000 FIFO
+   layers and 100,000 historical movements, with a 15-minute maximum for
+   nightly reconciliation. Record actual staging results before acceptance.
 6. Review the local stock-balance cursor pagination and server-side search with
    representative data before staging acceptance. The balances page requests
    one page at a time and resolves an exact location-code filter independently
