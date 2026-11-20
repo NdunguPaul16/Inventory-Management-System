@@ -30,9 +30,13 @@ compiled `reconcile:stock` job is tested against an in-memory replica set for a
 clean ledger, a one-cent difference and missing database configuration. Local
 results do not establish deployed behavior or representative-volume performance.
 An isolated local integration of Phase 2 with the staging security branch passed
-346 automated tests (3 shared, 214 backend, 129 frontend), normal and staging
-builds, three build-artifact checks and the 91.35% FIFO engine line-coverage gate.
-The integration branch has not been pushed or deployed.
+347 automated tests (3 shared, 215 backend, 129 frontend), lint, formatting,
+typecheck, normal and staging builds, and three build-artifact checks. The
+integrated branch separately passed the FIFO engine coverage gate: 91.35% of
+lines (391/428), with 90.9% for `service.ts`. The staging reconciliation command
+also has a local regression proving that an `ims` database target fails the
+isolation preflight before the job connects. The integration branch has not been
+pushed or deployed.
 
 ## Prerequisites for staging acceptance
 
