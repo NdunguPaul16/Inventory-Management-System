@@ -89,11 +89,16 @@ Storekeeper separately:
 
 ## Nightly reconciliation gate
 
-The built backend exposes `npm run reconcile:stock -w backend`. It requires an
-explicit `MONGODB_URI` and `MONGODB_DB_NAME`; its source is
-`backend/src/jobs/reconcile-stock.ts`. Run it from the repository root with an
+The built backend exposes `npm run reconcile:stock -w backend` for local or
+separately approved production operation. For staging, build with
+`npm run build:staging -w backend` and use
+`npm run reconcile:stock:staging -w backend`. The staging command runs the
+same database, Atlas-host and Key Value-host isolation preflight as the staging
+service **before** connecting to MongoDB. Both commands require an explicit
+`MONGODB_URI` and `MONGODB_DB_NAME`; the job source is
+`backend/src/jobs/reconcile-stock.ts`. Run from the repository root with an
 environment scoped to the intended database. A scheduler must invoke the
-command nightly and alert an operator on **either** nonzero exit:
+staging command nightly and alert an operator on **either** nonzero exit:
 
 | Exit | Meaning | Operator action |
 |---|---|---|

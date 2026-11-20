@@ -47,7 +47,36 @@ describe('read-only stock reconciliation job', () => {
       childEnv,
     );
     expect(build.code).toBe(0);
-  }, 60_000);
+    const stagingBuild = await childResult(
+      process.execPath,
+      [tscPath, '-p', 'tsconfig.staging.json'],
+      childEnv,
+    );
+    expect(stagingBuild.code).toBe(0);
+  }, 120_000);
+
+  it('rejects a non-staging database before the staging job can connect', async () => {
+    const marker = 'synthetic-password-must-not-appear';
+    const npmCli = process.env.npm_execpath;
+    if (!npmCli) throw new Error('Run this test through an npm workspace command');
+    const result = await childResult(process.execPath, [npmCli, 'run', 'reconcile:stock:staging'], {
+      ...childEnv,
+      PATH: process.env.PATH,
+      NODE_ENV: 'production',
+      MONGODB_DB_NAME: 'ims',
+      MONGODB_URI: `mongodb+srv://staging:${marker}@staging.example.test/ims`,
+      AUTH_RATE_LIMIT_REDIS_URL: 'rediss://staging.example.test:6379',
+      AUTH_ACCESS_TOKEN_SECRET: 'synthetic-access-secret-for-local-reconciliation-test',
+      AUTH_REFRESH_TOKEN_SECRET: 'synthetic-refresh-secret-for-local-reconciliation-test',
+      STAGING_ATLAS_HOST: 'staging.example.test',
+      PRODUCTION_ATLAS_HOST: 'production.example.test',
+      STAGING_KEY_VALUE_HOST: 'staging.example.test',
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Staging database name must be ims_staging');
+    expect(result.stdout).not.toContain('Stock reconciliation ');
+    expect(result.stdout + result.stderr).not.toContain(marker);
+  });
 
   it('fails closed with a generic error when database configuration is missing', async () => {
     const result = await childResult(process.execPath, ['dist/jobs/reconcile-stock.js'], childEnv);
