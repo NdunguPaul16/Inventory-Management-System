@@ -2,8 +2,11 @@
 
 This is a staging checklist for the local Phase 2 implementation. It does not
 authorise a deployment, database change, scheduled job or production access.
-Use a disposable replica-set database for any volume test; never use production
-`ims` for acceptance testing.
+Use a dedicated disposable replica set for deliberate drift injection or bulk
+volume loading; never use production `ims`. The operational staging database
+`ims_staging` already has users and audit history. Approved smoke-test postings
+there remain in its append-only ledger and must not be treated as deletable
+temporary records.
 
 ## Local evidence
 
@@ -58,8 +61,9 @@ backend-first gateway release need separate authorization and coordination.
    matching screens, and transactional audit records. Stocked identities cannot
    be changed or deactivated. The first inbound posting serializes with an
    overlapping identity or status edit. Confirm the seeded role permissions
-   after rollout and create only disposable staging master data with separate
-   approval. Item-level conversion definitions and replenishment fields are
+   after rollout and create uniquely named staging test master data only with
+   separate approval. Record its identifiers and retention plan. Item-level
+   conversion definitions and replenishment fields are
    available locally, but posting still requires base-unit quantities. The
    broader Phase 1 item fields, categories and unit catalog remain pending.
 2. Preserve the decided stock approval policy: every adjustment and count
@@ -70,9 +74,10 @@ backend-first gateway release need separate authorization and coordination.
    privilege account. Keep credentials out of commands, logs and source control.
 4. Review the local Mongoose `9.11.4` dependency commit before integration.
    Local installation and tests do not establish the deployed dependency version.
-5. Define representative item/location, layer and movement volumes and an
-   acceptable completion time before testing. These values must come from the
-   expected operation, not a guessed test fixture.
+5. Use the launch baseline supplied by the project owner: 1,000 active SKUs,
+   5 locations, 20,000 FIFO layers and 100,000 historical movements. Nightly
+   reconciliation must finish within 15 minutes. These are acceptance targets,
+   not a measured result.
 6. Review the local stock-balance cursor pagination and server-side search with
    representative data before staging acceptance. The balances page requests
    one page at a time and resolves an exact location-code filter independently
@@ -84,8 +89,10 @@ backend-first gateway release need separate authorization and coordination.
 
 ## Stock workflow acceptance
 
-In staging, use disposable items, locations and users. Record request IDs and
-HTTP statuses without recording credentials. Test Admin, Manager and
+In `ims_staging`, use approved, uniquely named test items and locations and
+separate authorised test users. Record request IDs and HTTP statuses without
+recording credentials. Retain posted movements and their audit history; do not
+delete or manually repair them after the test. Test Admin, Manager and
 Storekeeper separately:
 
 - Opening stock import creates FIFO layers only after request, approval and
@@ -101,8 +108,9 @@ Storekeeper separately:
   reconciliation, regardless of frontend navigation. A custom role granted an
   approval permission is still denied stock approval, rejection and posting.
 - A read-only reconciliation finds zero differences after the approved
-  sequence, and detects a deliberately introduced discrepancy in a **disposable**
-  database. Do not alter historical or production records to create drift.
+  sequence. Inject a discrepancy only in a **separate disposable replica set**
+  and verify that reconciliation reports it without repair. Do not alter
+  operational `ims_staging`, historical or production records to create drift.
 
 ## Nightly reconciliation gate
 
@@ -132,12 +140,19 @@ does not repair stock. Production scheduling requires separate approval.
 
 ## Representative-volume acceptance
 
-On the disposable staging database, create the agreed volume through approved
-posting APIs, then run the reconciliation command while other posting traffic
-is controlled. Record item/location count, movement count, elapsed time, peak
-resource use, exit code and differences. Verify a single committed snapshot is
-used so concurrent postings do not cause false drift. Do not use these data or
-measurements as a reason to change production capacity without review.
+On a dedicated disposable staging-equivalent replica set, create the agreed
+volume through approved posting APIs, then run reconciliation while other
+posting traffic is controlled. Record item/location, layer and movement counts,
+elapsed time, peak resource use, exit code, differences and query-plan evidence
+for balance and FIFO-layer pages. Verify a single committed snapshot is used so
+concurrent postings do not cause false drift. Compare the test environment's
+capacity with operational staging before treating its timing as staging
+evidence; if they differ, a separately approved bounded staging measurement is
+still required. The `reconcile:stock:staging` command is intentionally pinned to
+`ims_staging`; a separate disposable database must use `reconcile:stock` with
+its own least-privilege credentials and an operator-verified host and database
+name. Do not use these measurements to change production capacity without
+review.
 
 Phase 2 release remains pending until the master-data prerequisite is reviewed
 and integrated, staging workflow checks, scheduled alert delivery and the
