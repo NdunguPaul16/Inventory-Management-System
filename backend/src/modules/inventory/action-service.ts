@@ -1,6 +1,18 @@
 import mongoose, { Types } from 'mongoose';
-import type { AdjustmentInput, OpeningStockInput } from '@ims/shared';
-import { postAdjustment, postOpeningStock, reverse, type PostingHook } from './engine/service.js';
+import { Decimal } from 'decimal.js';
+import type {
+  AdjustmentInput,
+  OpeningStockBatchInput,
+  OpeningStockImportInput,
+  OpeningStockInput,
+} from '@ims/shared';
+import {
+  postAdjustment,
+  postOpeningStock,
+  postOpeningStockBatch,
+  reverse,
+  type PostingHook,
+} from './engine/service.js';
 import { StockMovement } from './engine/models.js';
 import type { MovementResult, SourceDocument } from './engine/types.js';
 import { AppError } from '../../lib/errors.js';
@@ -8,18 +20,21 @@ import { hasPermission } from '../../middleware/require-permission.js';
 import { writeAuditLog } from '../audit/service.js';
 import { nextDocumentNumber } from '../counters/service.js';
 import { StockAction, type StockActionDoc, type StockActionType } from './action-model.js';
+import { Item } from './items/model.js';
+import { Location } from './locations/model.js';
 
 type ReversalRequest = { movementId: string; reason: string };
-type ActionPayload = OpeningStockInput | AdjustmentInput | ReversalRequest;
+type ActionPayload = OpeningStockInput | OpeningStockBatchInput | AdjustmentInput | ReversalRequest;
 type ActionOperation = 'request' | 'approve' | 'post';
 
+/** Filter by action type before lookup so an unapproved request cannot be enumerated. */
 export function permittedStockActionTypes(
   permissions: readonly string[],
   operation: 'approve' | 'post',
 ): StockActionType[] {
-  return (['OPENING', 'ADJUSTMENT', 'REVERSAL'] as const).filter((actionType) => {
+  return (['OPENING', 'OPENING_BATCH', 'ADJUSTMENT', 'REVERSAL'] as const).filter((actionType) => {
     const area =
-      actionType === 'OPENING'
+      actionType === 'OPENING' || actionType === 'OPENING_BATCH'
         ? 'opening'
         : actionType === 'ADJUSTMENT'
           ? 'adjustments'
@@ -39,7 +54,7 @@ function requireActionPermission(
   operation: ActionOperation,
 ): void {
   const area =
-    actionType === 'OPENING'
+    actionType === 'OPENING' || actionType === 'OPENING_BATCH'
       ? 'opening'
       : actionType === 'ADJUSTMENT'
         ? 'adjustments'
@@ -115,6 +130,65 @@ export async function createStockAction(
   }
 }
 
+/** Resolve human sheet references before a single reviewed batch request is persisted. */
+export async function createOpeningImport(
+  input: OpeningStockImportInput,
+  actorId: string,
+  permissions: readonly string[],
+) {
+  requireActionPermission(permissions, 'OPENING_BATCH', 'request');
+  const skus = [...new Set(input.lines.map((line) => line.sku.toUpperCase()))];
+  const codes = [...new Set(input.lines.map((line) => line.locationCode.toUpperCase()))];
+  const [items, locations] = await Promise.all([
+    Item.find({ sku: { $in: skus }, isActive: true, type: { $ne: 'SERVICE' } }).lean(),
+    Location.find({ code: { $in: codes }, isActive: true }).lean(),
+  ]);
+  const bySku = new Map(items.map((item) => [item.sku, item]));
+  const byCode = new Map(locations.map((location) => [location.code, location]));
+  const batchSerials = new Set<string>();
+  const lines = input.lines.map(({ sku, locationCode, ...line }) => {
+    const item = bySku.get(sku.toUpperCase());
+    const location = byCode.get(locationCode.toUpperCase());
+    if (!item || !location) {
+      throw AppError.badRequest(
+        `Line ${line.lineId}: active stock item SKU or location code was not found`,
+      );
+    }
+    const serials = (line.serialNumbers ?? []).map((serial) => serial.toUpperCase());
+    if (item.trackSerial) {
+      const quantity = new Decimal(line.quantity);
+      if (
+        !quantity.isInteger() ||
+        quantity.greaterThan(Number.MAX_SAFE_INTEGER) ||
+        serials.length !== quantity.toNumber()
+      ) {
+        throw AppError.badRequest(`Line ${line.lineId}: enter one serial number per whole unit`);
+      }
+    } else if (serials.length) {
+      throw AppError.badRequest(`Line ${line.lineId}: this item does not track serial numbers`);
+    }
+    for (const serial of serials) {
+      if (batchSerials.has(serial)) {
+        throw AppError.badRequest(`Line ${line.lineId}: duplicate serial number in import`);
+      }
+      batchSerials.add(serial);
+    }
+    return {
+      ...line,
+      sku: item.sku,
+      locationCode: location.code,
+      itemId: String(item._id),
+      locationId: String(location._id),
+    };
+  });
+  return createStockAction(
+    'OPENING_BATCH',
+    { sourceDoc: input.sourceDoc, lines },
+    actorId,
+    permissions,
+  );
+}
+
 export async function listStockActions(options: {
   actionType?: StockActionType;
   status?: StockActionDoc['status'];
@@ -160,7 +234,9 @@ export async function approveStockAction(
           movementType: { $ne: 'OPENING' },
         }).session(session);
         bootstrapOverride =
-          permissions.includes('*') && action.actionType === 'OPENING' && !operationalStockExists;
+          permissions.includes('*') &&
+          (action.actionType === 'OPENING' || action.actionType === 'OPENING_BATCH') &&
+          !operationalStockExists;
         if (!bootstrapOverride)
           throw AppError.forbidden('A different authorised user must approve this request');
       }
@@ -262,6 +338,23 @@ async function postApprovedAction(
         ...(payload.receivedAt ? { receivedAt: new Date(payload.receivedAt) } : {}),
         ...posting,
       },
+      onPosted,
+    );
+  }
+  if (action.actionType === 'OPENING_BATCH') {
+    const payload = action.payload as unknown as OpeningStockBatchInput;
+    return postOpeningStockBatch(
+      payload.lines.map((line) => ({
+        itemId: line.itemId,
+        locationId: line.locationId,
+        quantity: line.quantity,
+        unitCost: line.unitCost,
+        sourceDoc: { ...sourceDoc, lineId: line.lineId },
+        postedBy: actorId,
+        ...(line.receivedAt ? { receivedAt: new Date(line.receivedAt) } : {}),
+        ...(line.serialNumbers ? { serialNumbers: line.serialNumbers } : {}),
+      })),
+      posting.idempotencyKey,
       onPosted,
     );
   }

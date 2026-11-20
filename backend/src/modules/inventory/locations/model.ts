@@ -1,6 +1,7 @@
 import { Schema, model } from 'mongoose';
+import { LOCATION_TYPES } from '@ims/shared';
 
-export const LOCATION_TYPES = ['WAREHOUSE', 'WORKSHOP', 'SHOWROOM', 'IN_TRANSIT'] as const;
+export { LOCATION_TYPES } from '@ims/shared';
 export type LocationType = (typeof LOCATION_TYPES)[number];
 
 export interface LocationDoc {

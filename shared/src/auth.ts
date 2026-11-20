@@ -78,6 +78,14 @@ export const authUserSchema = userSchema.pick({
 });
 export const authUserResponseSchema = apiSuccessSchema(authUserSchema);
 export type AuthUser = z.infer<typeof authUserSchema>;
+
+/** Stock approvals are reserved for the protected system Manager and Admin roles. */
+export function isSystemStockApprover(user: Pick<AuthUser, 'roles'>): boolean {
+  return user.roles.some(
+    (role) => role.isSystem && (role.name === 'Admin' || role.name === 'Owner / Manager'),
+  );
+}
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type BootstrapAdminInput = z.infer<typeof bootstrapAdminSchema>;

@@ -67,23 +67,23 @@ Tasks:
 **Goal:** secure access and the master data every later module needs. (§4, §12)
 
 Backend:
-- [ ] Users, roles, permissions (seed default roles from §12)
-- [ ] Login / refresh / logout / me; argon2 hashing; lockout; JWT + httpOnly refresh cookie
-- [ ] RBAC middleware `requirePermission('items.create')`
-- [ ] Audit log service + middleware (§17)
+- [x] Users, roles and permissions with seeded default roles (§12; existing local API)
+- [x] Login / refresh / logout / me; argon2 hashing; lockout; JWT + httpOnly refresh cookie (existing local API; staging security hardening is on a separate branch)
+- [x] RBAC middleware with permission-gated routes (existing local API)
+- [ ] Audit log service exists and sensitive writes use it; general audit middleware and the staging Audit History work have not been integrated into this branch (§17)
 - [ ] Settings: company profile, logo, numbering formats, approval thresholds, base currency
-- [ ] Master data CRUD: categories, units + conversions, locations, currencies and exchange rates, tax categories, payment methods, customer groups
-- [ ] Items CRUD with all fields in §4.2 (incl. item type, serial tracking, KRA codes as placeholders)
+- [ ] Master data CRUD: operational location CRUD and item-level unit conversions are implemented locally; categories, a unit catalog, currencies and exchange rates, tax categories, payment methods and customer groups remain pending
+- [ ] Items CRUD with all fields in §4.2: item identity, type, serial/batch tracking, description, unit conversions and replenishment fields are implemented locally; category, sales-price, tax, KRA and variant fields remain pending
 
 Frontend:
 - [x] Login page, protected routes, permission-aware menu (Phase 1A on `dfstock`)
 - [x] Users & roles admin (Phase 1B on `dfstock`); settings pages remain
-- [ ] Master data screens; items list (search, filters, pagination) and item form
+- [x] Local item and location screens with search, status filtering, cursor pagination, create and edit forms; staging acceptance pending
 
 **Acceptance criteria:**
 - Users without a permission get `403` from the API and don't see the menu item.
 - Every create/update is visible in the audit log with the user and a diff.
-- Items can be created for all six item types, with unit conversions.
+- Items can be created locally for all six item types, with validated unit conversions. Staging acceptance is pending. Stock posting still takes base-unit quantities and does not convert entered units.
 
 ---
 
@@ -99,32 +99,105 @@ balance reconciliation, shared request schemas, and permission-gated inventory r
 been added. Authentication now populates the permission context. Opening stock,
 adjustments and reversals use request → approval → posting records with restricted role
 permissions; FIFO layers persist rounded remaining cents so transfers and reversals carry
-recorded costs. Configurable approval thresholds, the CSV/Excel opening-stock wizard,
-count workflows, and the Phase 2 acceptance tests are still outstanding.
+recorded costs. Deployed Phase 2 acceptance remains outstanding. The later D12
+decision requires Manager/Admin approval for every stock variance, so a stock
+value threshold does not change approval authority.
+
+**Local Phase 2 branch progress (2026-11-18):** a stock-count backend
+now records a book snapshot, count entry, separate approval, and FIFO
+`COUNT_VARIANCE` posting. It rejects stale snapshots and records count events
+atomically with the relevant changes. This work is on `phase-2/stock-counts`,
+not merged into `dfstock`; the full Phase 2 acceptance criteria remain open.
+The local branch also replaces the stock-balances placeholder with a read-only
+page using the existing balance API and adds item detail tabs for stock, FIFO
+layers and cursor-paged movement history. The stock-count page uses
+count-specific item/location selectors, including zero-balance pairs, and
+supports entry, approval, rejection and posting according to role permissions.
+Serial-tracked counts freeze the book serial set, accept the physical set, and
+post missing and found serial movements atomically through the FIFO engine.
+Same-quantity serial swaps still produce OUT and IN movements. Conflicting
+serials already stocked elsewhere abort the transaction. A representative
+staging acceptance run remains unverified.
+The adjustment request, approval and posting screen now uses the existing action API,
+and the transfer screen uses the existing idempotent posting API. Both use permission-gated
+item and location selectors.
+An Admin can also submit a single opening-stock request through a new screen; an
+authorised reviewer approves it and the approver posts it through the existing
+action service. The local branch also accepts a validated opening-stock batch
+of up to 100 lines as one approval request. Posting creates every FIFO layer
+and movement in one idempotent transaction; a rejected row rolls back the full
+batch. The CSV/XLSX wizard parses and previews rows locally, resolves existing
+item SKUs and location codes on the backend, and uses the same approval and
+posting workflow. Phase 1 item/location master-data management is required to
+prepare real imports; deployed acceptance and broad spreadsheet fixtures remain
+unverified.
+An `inventory.valuation.read` API now groups recorded movement quantity and
+whole-cent cost by item/location at an inclusive UTC posting cutoff. Fractional
+transfer and reversal tests cover value conservation; a full valuation report
+and late landed-cost effects remain later-phase work.
+The backend now enforces a per-file 90% line-coverage gate for the FIFO engine
+through `npm run test:engine:coverage -w backend`. The latest local result is
+91.35% engine lines and 90.9% for `service.ts` (116 backend tests); branch coverage
+is 81.45%, so this does not establish comprehensive branch coverage. A serial
+receipt regression test also exposed and corrected a Mongoose transaction
+option required when creating multiple serial records. These changes have not
+been merged or validated on staging.
+
+The reconciliation API now streams balances, layers and movements from one
+MongoDB snapshot, including when another posting commits during the check.
+An in-memory MongoDB regression crosses cursor batches and detects a one-cent
+drift in the final movement.
+An authorised inventory page runs the check only when requested; a read-only
+job command reports counts and exits nonzero when differences exist. An
+in-memory replica-set test executes the compiled job for both a clean ledger
+and a one-cent drift, confirming its exit codes and that it writes no stock or
+audit records. A missing-configuration check verifies a generic failure and
+nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
+and nightly-operation gates.
+Nightly scheduling, alert delivery and a representative-volume run remain
+deployment tasks. No reconciliation result automatically changes stock.
+The Phase 2 branch's local suite passes 202 tests across shared, backend and
+frontend; this is not staging acceptance evidence.
+The FIFO layer API and item detail now page layers in receipt order, with a
+bounded query and an explicit load-more action. Representative-volume staging
+validation remains pending.
+The item detail also loads later stock locations from its FIFO tab. The balance
+screen resolves an exact location code on the backend, so its filter can reach
+locations absent from the first balance page.
+Stock action approval, rejection and posting now check the caller's operation
+permission before request lookup, and filter request types by that permission.
+The API also requires an active system Admin or Owner / Manager role before
+stock approval, rejection and posting lookups. Custom roles with matching
+permission strings receive `403`; frontend action controls follow the same
+role rule. Tests cover existing and nonexistent IDs without an existence leak.
+This prevents a restricted user from distinguishing an existing request from a
+nonexistent one through the mutation API.
 
 Backend:
-- [ ] `backend/src/modules/inventory/engine/` service: `postIn`, `postOut`, `transfer`, `reverse`; all calls run inside Mongo transactions
-- [ ] `stock_movements`, `cost_layers`, `stock_balances`, `serial_numbers` models + indexes
-- [ ] Negative-stock guard; idempotency keys on posting endpoints
-- [ ] **Opening stock** import (CSV/Excel → validated → posted as `OPENING` layers)
-- [ ] Stock adjustments with approval workflow (§12 thresholds)
-- [ ] Stock transfers between locations (FIFO layers preserved)
-- [ ] Stock counts: freeze → count entry → variance review → post `COUNT_VARIANCE`
-- [ ] Reconciliation job (§5.4) + admin endpoint
-- [ ] Queries: balances by item/location, movement history, layer view, valuation as at date
+- [x] `backend/src/modules/inventory/engine/` service: `postIn`, `postOut`, `transfer`, `reverse`; all calls run inside Mongo transactions (local)
+- [x] `stock_movements`, `cost_layers`, `stock_balances`, `serial_numbers` models + indexes (local)
+- [x] Negative-stock guard; idempotency keys on posting endpoints (local)
+- [x] **Opening stock** import (CSV/Excel → validated → posted as `OPENING` layers) (local)
+- [x] Stock adjustment request → separate approval → posting workflow (local)
+- [x] Stock approval authority: a different Manager/Admin approves every adjustment and count variance, regardless of value (§12; API and UI enforced locally)
+- [x] Stock transfers between locations (FIFO layers preserved) (local)
+- [x] Stock counts: freeze → count entry → variance review → post `COUNT_VARIANCE` (local)
+- [x] Read-only reconciliation command and permission-gated endpoint (§5.4) (local)
+- [ ] Nightly scheduling, alert delivery and representative-volume staging run
+- [x] Queries: balances by item/location, movement history, layer view, valuation as at date (local)
 
 Frontend:
-- [ ] Stock balances page; item detail tabs: *Stock*, *FIFO layers*, *Movements*
-- [ ] Opening stock import wizard
-- [ ] Adjustment, transfer and stock count screens with approval actions
+- [x] Stock balances page; item detail tabs: *Stock*, *FIFO layers*, *Movements* (local)
+- [x] Opening stock import wizard (local)
+- [x] Adjustment, transfer and stock count screens with approval actions (local)
 
 **Tests (must have):**
-- [ ] FIFO consumption across multiple layers (e.g. lot A 10 @ 26,000, lot B 10 @ 28,000, issue 12 → cost 316,000)
-- [ ] Insufficient stock rejected; no partial writes after abort
-- [ ] Concurrent OUT postings on the same item never oversell (parallel test)
-- [ ] Transfer keeps the original layer cost and date
-- [ ] Reversal restores the exact prior state
-- [ ] Reconciliation finds no differences after a randomized sequence of postings
+- [x] FIFO consumption across multiple layers (e.g. lot A 10 @ 26,000, lot B 10 @ 28,000, issue 12 → cost 316,000) (local)
+- [x] Insufficient stock rejected; no partial writes after abort (local)
+- [x] Concurrent OUT postings on the same item never oversell (parallel test) (local)
+- [x] Transfer keeps the original layer cost and date (local)
+- [x] Reversal restores quantity and recorded value while retaining the original and reversing movements (local)
+- [x] Reconciliation finds no differences after a seeded sequence of postings (local)
 
 **Acceptance criteria:** all engine tests pass with ≥ 90% coverage of `backend/src/modules/inventory/engine/`.
 

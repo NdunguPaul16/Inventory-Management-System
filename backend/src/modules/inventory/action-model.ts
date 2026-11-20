@@ -1,6 +1,6 @@
 import { Schema, model, type Types } from 'mongoose';
 
-export const STOCK_ACTION_TYPES = ['OPENING', 'ADJUSTMENT', 'REVERSAL'] as const;
+export const STOCK_ACTION_TYPES = ['OPENING', 'OPENING_BATCH', 'ADJUSTMENT', 'REVERSAL'] as const;
 export type StockActionType = (typeof STOCK_ACTION_TYPES)[number];
 export const STOCK_ACTION_STATUSES = [
   'PENDING_APPROVAL',

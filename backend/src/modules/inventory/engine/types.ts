@@ -50,6 +50,19 @@ export interface TransferInput {
   serialNumbers?: string[];
 }
 
+export interface SerialCountVarianceInput {
+  itemId: Types.ObjectId | string;
+  locationId: Types.ObjectId | string;
+  missingSerials: string[];
+  addedSerials: string[];
+  /** Approved cost per found or returned unit, in KES cents. */
+  inboundUnitCost?: number;
+  sourceDoc: SourceDocument;
+  postedBy: Types.ObjectId | string;
+  idempotencyKey: string;
+  reason: string;
+}
+
 export interface MovementResult {
   movementIds: string[];
   movements: Array<{

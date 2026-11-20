@@ -655,12 +655,13 @@ describe('authentication and roles', () => {
     expect((await StockAction.findById(action._id))?.status).toBe('PENDING_APPROVAL');
   });
 
-  it('conceals requests outside a scoped action permission while preserving allowed approval', async () => {
-    const role = await Role.create({
-      name: 'Opening action approver',
-      permissions: ['inventory.opening.approve', 'inventory.opening.post'],
-      isSystem: false,
-    });
+  it('conceals requests outside a scoped system-manager permission while preserving allowed approval', async () => {
+    const role = await Role.findOneAndUpdate(
+      { name: 'Owner / Manager', isSystem: true },
+      { $set: { permissions: ['inventory.opening.approve', 'inventory.opening.post'] } },
+      { returnDocument: 'after' },
+    );
+    if (!role) throw new Error('System Manager role was not seeded');
     const user = await User.create({
       name: 'Scoped approver',
       email: 'scoped@example.com',

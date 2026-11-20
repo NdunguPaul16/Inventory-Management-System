@@ -20,6 +20,7 @@ export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   accessToken?: string;
+  idempotencyKey?: string;
   signal?: AbortSignal;
   acceptStatuses?: number[];
 }
@@ -45,6 +46,7 @@ export async function apiRequest<T extends z.ZodType>(
       Accept: 'application/json',
       ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(options.accessToken ? { Authorization: `Bearer ${options.accessToken}` } : {}),
+      ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
     },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     credentials: 'include',
