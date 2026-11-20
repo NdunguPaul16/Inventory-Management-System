@@ -59,6 +59,13 @@ already installed local MongoDB binary, then run
 root. The script creates its own in-memory database and ignores deployed URI
 settings.
 
+A separate local authentication probe ran the compiled reconciliation job with
+`NODE_ENV=production` against an authenticated in-memory replica set using a
+`read@ims_staging` database user. It found zero differences, and an attempted
+stock write with that user was denied. The probe generates credentials in memory
+and never contacts Atlas. It does not verify the staging isolation preflight or
+the actual Atlas user's privileges; those remain deployment acceptance checks.
+
 ## Branch and deployment boundary
 
 `integration/phase-2-security` combines the stock review branch with temporary
