@@ -128,9 +128,11 @@ of up to 100 lines as one approval request. Posting creates every FIFO layer
 and movement in one idempotent transaction; a rejected row rolls back the full
 batch. The CSV/XLSX wizard parses and previews rows locally, resolves existing
 item SKUs and location codes on the backend, and uses the same approval and
-posting workflow. Phase 1 item/location master-data management is required to
-prepare real imports; deployed acceptance and broad spreadsheet fixtures remain
-unverified.
+posting workflow. Local parser tests cover quoted CSV, duplicate headers, the
+100-row limit, and a multi-row XLSX with serial numbers; the preview now shows
+serials before submission. Phase 1 item/location master-data management is
+required to prepare real imports; deployed acceptance and broader spreadsheet
+fixtures remain unverified.
 An `inventory.valuation.read` API now groups recorded movement quantity and
 whole-cent cost by item/location at an inclusive UTC posting cutoff. Fractional
 transfer and reversal tests cover value conservation; a full valuation report

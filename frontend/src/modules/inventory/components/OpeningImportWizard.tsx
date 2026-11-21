@@ -197,6 +197,7 @@ export function OpeningImportWizard() {
                       <th className="p-2">Quantity</th>
                       <th className="p-2">Cost (cents)</th>
                       <th className="p-2">Received</th>
+                      <th className="p-2">Serial numbers</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -208,6 +209,7 @@ export function OpeningImportWizard() {
                         <td className="p-2">{line.quantity}</td>
                         <td className="p-2">{line.unitCost}</td>
                         <td className="p-2">{line.receivedAt?.slice(0, 10) ?? '—'}</td>
+                        <td className="p-2">{line.serialNumbers?.join('; ') ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>

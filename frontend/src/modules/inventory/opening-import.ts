@@ -10,26 +10,35 @@ function csvRows(text: string): string[][] {
   let row: string[] = [];
   let cell = '';
   let quoted = false;
+  let closedQuote = false;
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index];
+    if (closedQuote && char !== ',' && char !== '\n' && char !== '\r') {
+      throw new Error('The CSV file contains text after a quoted field.');
+    }
     if (char === '"') {
       if (quoted && text[index + 1] === '"') {
         cell += '"';
         index += 1;
-      } else if (quoted || cell === '') {
-        quoted = !quoted;
+      } else if (quoted) {
+        quoted = false;
+        closedQuote = true;
+      } else if (cell === '') {
+        quoted = true;
       } else {
         throw new Error('The CSV file contains an invalid quote.');
       }
     } else if (char === ',' && !quoted) {
       row.push(cell);
       cell = '';
+      closedQuote = false;
     } else if ((char === '\n' || char === '\r') && !quoted) {
       if (char === '\r' && text[index + 1] === '\n') index += 1;
       row.push(cell);
       rows.push(row);
       row = [];
       cell = '';
+      closedQuote = false;
     } else {
       cell += char;
     }
@@ -70,7 +79,12 @@ function utcDate(input: string, row: number): string | undefined {
 export function parseOpeningRows(rows: unknown[][]): ImportLine[] {
   const [headings, ...data] = rows;
   if (!headings) throw new Error('The file has no header row.');
-  const columns = new Map(headings.map((heading, index) => [value(heading).toLowerCase(), index]));
+  const columns = new Map<string, number>();
+  for (const [index, heading] of headings.entries()) {
+    const name = value(heading).toLowerCase();
+    if (name && columns.has(name)) throw new Error(`Duplicate column: ${name}.`);
+    if (name) columns.set(name, index);
+  }
   for (const heading of HEADERS.slice(0, 4)) {
     if (!columns.has(heading.toLowerCase())) throw new Error(`Missing column: ${heading}.`);
   }
