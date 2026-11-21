@@ -160,11 +160,13 @@ Storekeeper separately:
 The built backend exposes `npm run reconcile:stock -w backend` for local or
 separately approved production operation. For staging, build with
 `npm run build:staging -w backend` and use
-`npm run reconcile:stock:staging -w backend`. The staging command runs the
-same database, Atlas-host and Key Value-host isolation preflight as the staging
-service **before** connecting to MongoDB. Both commands require an explicit
-`MONGODB_URI` and `MONGODB_DB_NAME`; the job source is
-`backend/src/jobs/reconcile-stock.ts`. Run from the repository root with an
+`npm run reconcile:stock:staging -w backend`. The staging command runs a
+Mongo-only database and Atlas-host isolation preflight **before** connecting;
+the web-service Key Value and authentication preflight remains unchanged. The
+staging command also requires protected email configuration and sends an alert
+for clean, discrepancy, failure and duration-warning outcomes. Both commands
+require an explicit `MONGODB_URI` and `MONGODB_DB_NAME`; the staging entry point
+is `backend/src/jobs/reconcile-stock-staging.ts`. Run from the repository root with an
 environment scoped to the intended database. A scheduler must invoke the
 staging command nightly and alert an operator on **either** nonzero exit:
 
@@ -177,6 +179,8 @@ staging command nightly and alert an operator on **either** nonzero exit:
 Before enabling a schedule, verify the scheduler's database identity, secret
 handling, run overlap policy, timeout and alert destination in staging. Test
 all three exit paths and a delivered alert without exposing connection data.
+The prepared 23:00 UTC Render Cron and independent-watchdog design is documented
+in `docs/staging-reconciliation-cron.md`; neither is active or live-verified.
 If the scheduled job causes an issue, disable **only that staging schedule** and
 use the existing manual reconciliation endpoint while investigating. The job
 does not repair stock. Production scheduling requires separate approval.

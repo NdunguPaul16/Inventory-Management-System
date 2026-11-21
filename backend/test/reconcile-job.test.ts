@@ -73,7 +73,7 @@ describe('read-only stock reconciliation job', () => {
       STAGING_KEY_VALUE_HOST: 'staging.example.test',
     });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('Staging database name must be ims_staging');
+    expect(result.stderr).toContain('Stock reconciliation failed; no stock records were changed.');
     expect(result.stdout).not.toContain('Stock reconciliation ');
     expect(result.stdout + result.stderr).not.toContain(marker);
   });

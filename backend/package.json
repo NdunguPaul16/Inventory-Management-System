@@ -13,7 +13,7 @@
     "start:staging": "node dist-staging/cli/check-staging-env.js && node dist-staging/staging/index.js",
     "bootstrap:admin": "node dist/cli/check-staging-env.js && node dist/cli/bootstrap-admin.js",
     "reconcile:stock": "node dist/jobs/reconcile-stock.js",
-    "reconcile:stock:staging": "node dist-staging/cli/check-staging-env.js && node dist-staging/jobs/reconcile-stock.js",
+    "reconcile:stock:staging": "node dist-staging/jobs/reconcile-stock-staging.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:build-artifacts": "node scripts/verify-build-artifacts.mjs",
