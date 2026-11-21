@@ -5,6 +5,7 @@ import { AppError } from '../../../lib/errors.js';
 import { writeAuditLog } from '../../audit/service.js';
 import { Item } from '../items/model.js';
 import { Location } from '../locations/model.js';
+import { stockDecimal128 as decimal128 } from '../quantity.js';
 import { nextDocumentNumber } from '../../counters/service.js';
 import {
   CostLayer,
@@ -56,6 +57,7 @@ function parseQuantity(value: string): Decimal {
   if (!quantity.isFinite() || !quantity.greaterThan(0)) {
     throw AppError.badRequest('Quantity must be greater than zero');
   }
+  decimal128(quantity);
   return quantity;
 }
 
@@ -97,10 +99,6 @@ function fingerprint(value: unknown): string {
   return createHash('sha256')
     .update(JSON.stringify(stableValue(value)))
     .digest('hex');
-}
-
-function decimal128(value: Decimal): Types.Decimal128 {
-  return Types.Decimal128.fromString(value.toString());
 }
 
 function cents(value: Decimal): number {

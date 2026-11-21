@@ -156,8 +156,11 @@ nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
 and nightly-operation gates.
 Nightly scheduling, alert delivery and a representative-volume run remain
 deployment tasks. No reconciliation result automatically changes stock.
-The Phase 2 branch's local suite passes 202 tests across shared, backend and
-frontend; this is not staging acceptance evidence.
+Unrepresentable Decimal128 quantities now fail with a client error before an
+approval request or physical count entry can be recorded; direct engine calls
+reject them without stock writes. The local staging integration suite passes
+350 tests (3 shared, 218 backend, 129 frontend); this is not deployed staging
+acceptance evidence.
 The FIFO layer API and item detail now page layers in receipt order, with a
 bounded query and an explicit load-more action. Representative-volume staging
 validation remains pending.

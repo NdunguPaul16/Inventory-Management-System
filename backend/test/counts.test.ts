@@ -127,6 +127,23 @@ async function submitted(countId: string, countedQuantity: string, inboundUnitCo
 }
 
 describe('stock counts', () => {
+  it('rejects an unrepresentable physical quantity without submitting the count', async () => {
+    const count = await frozen();
+    await expect(
+      enterStockCount(
+        count.id,
+        {
+          countedQuantity: '9'.repeat(35),
+          inboundUnitCost: 0,
+          reason: 'Invalid physical quantity',
+        },
+        String(storekeeper),
+      ),
+    ).rejects.toMatchObject({ status: 400, code: 'BAD_REQUEST' });
+    expect((await StockCount.findById(count.id).lean())?.status).toBe('FROZEN');
+    expect(await StockMovement.countDocuments()).toBe(0);
+  });
+
   it('filters count history and pages backward without repeating a record', async () => {
     const first = await frozen();
     await rejectStockCount(first.id, String(manager), 'Repeat the count');

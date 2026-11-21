@@ -120,6 +120,17 @@ beforeEach(async () => {
 });
 
 describe('FIFO stock engine', () => {
+  it('rejects an unrepresentable Decimal128 quantity before writing stock', async () => {
+    await expect(
+      postIn(input({ quantity: '9'.repeat(35), movementType: 'OPENING', unitCost: 0 })),
+    ).rejects.toMatchObject({ status: 400, code: 'BAD_REQUEST' });
+
+    expect(await StockMovement.countDocuments()).toBe(0);
+    expect(await CostLayer.countDocuments()).toBe(0);
+    expect(await StockBalance.countDocuments()).toBe(0);
+    expect(await PostingRequest.countDocuments()).toBe(0);
+  });
+
   it('consumes the oldest cost layers first and records the exact layer slices', async () => {
     await postIn(input({ quantity: '10', movementType: 'OPENING', unitCost: 26_000 }));
     await postIn(input({ quantity: '10', movementType: 'OPENING', unitCost: 28_000 }));
