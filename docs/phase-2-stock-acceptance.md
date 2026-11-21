@@ -47,6 +47,20 @@ installed local MongoDB binary and run
 `node backend/scripts/benchmark-stock-reconciliation.mjs` from the repository
 root. The script creates its own database and does not read a deployed URI.
 
+On 2026-11-21, the synthetic fixture kept those same totals but placed 75
+layers at one item/location pair, offset by 71 pairs with three layers. This
+exercised a 50-layer first page and a distinct 25-layer second page. SKU search
+returned five balances, and location search returned two distinct 50-row pages.
+Two local runs reconciled all 5,000 balances with zero differences in 2,405
+and 2,259 ms; peak Node.js RSS was 453 and 511 MiB. The FIFO pages used the
+`itemId_1_locationId_1_receivedAt_1__id_1` index and examined 50 and 25
+documents. The SKU substring lookup scanned all 1,000 item documents, while
+its five-balance result used the item/location index. The first location
+balance page examined 250 documents using `_id_`. These are local query-plan
+and correctness observations, not evidence of Atlas latency, concurrent users
+or an approved staging run. Substring item search should be remeasured if the
+catalog grows materially beyond the agreed 1,000-SKU baseline.
+
 The separate `backend/scripts/verify-reconciliation-read-role.mjs` check passed
 locally on 2026-11-20: an authenticated in-memory MongoDB user with only
 `read@ims_staging` ran the compiled reconciliation job and was denied a stock

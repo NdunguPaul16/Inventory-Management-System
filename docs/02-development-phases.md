@@ -156,7 +156,11 @@ nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
 and nightly-operation gates.
 An isolated local benchmark at the agreed launch baseline (1,000 SKUs,
 5 locations, 20,000 FIFO layers and 100,000 movements) found zero differences
-in two runs under four seconds each. A separate local authenticated MongoDB
+in two runs under four seconds each. A later local fixture at the same totals
+verified SKU and location search, two distinct balance pages and two FIFO
+pages for a 75-layer item/location pair. The FIFO page query used its compound
+index; case-insensitive substring SKU lookup scanned all 1,000 item records.
+A separate local authenticated MongoDB
 test confirmed that the compiled reconciliation job works with `read@ims_staging`
 and cannot write stock. These results do not establish deployed performance or
 Atlas permissions. Nightly scheduling, delivered alerts and a **staging** run
