@@ -69,6 +69,25 @@ function mockApi(permissions: string[]) {
 }
 
 describe('opening-stock import wizard', () => {
+  it('shows serial numbers in the local preview before any import request', async () => {
+    const fetchMock = mockApi(['inventory.opening.request']);
+    renderRoute('/inventory/opening-stock');
+    const file = new File(
+      ['sku,locationCode,quantity,unitCostCents,serialNumbers\nSERIAL-CUE,WH,2,250,SER-1; SER-2'],
+      'serials.csv',
+      { type: 'text/csv' },
+    );
+    Object.defineProperty(file, 'text', {
+      value: async () =>
+        'sku,locationCode,quantity,unitCostCents,serialNumbers\nSERIAL-CUE,WH,2,250,SER-1; SER-2',
+    });
+    await userEvent.upload(await screen.findByLabelText('CSV or Excel file'), file);
+    expect(await screen.findByText('SER-1; SER-2')).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(([url]) => url === '/api/v1/inventory/opening-stock/imports'),
+    ).toHaveLength(0);
+  });
+
   it('previews a CSV before one explicit request, then supports approval and posting', async () => {
     const fetchMock = mockApi(['*']);
     renderRoute('/inventory/opening-stock');
