@@ -54,14 +54,28 @@ in each of two runs (3,847 and 4,070 ms); peak Node.js process RSS was 470 and
 inserts synthetic consistent records, requires a preinstalled local MongoDB
 binary and never reads a deployed URI. It does not measure posting API throughput,
 the MongoDB process's memory, Atlas/Render performance or nightly scheduling.
-For its sample page queries, MongoDB examined 50 balance documents, 4 FIFO
-layers and 50 movement documents; filtered search at scale remains unmeasured.
+For its original sample page queries, MongoDB examined 50 balance documents,
+4 FIFO layers and 50 movement documents.
 It is preliminary local evidence, **not** the 15-minute staging acceptance result.
 To repeat the probe, build the backend, set `MONGOMS_SYSTEM_BINARY` to an
 already installed local MongoDB binary, then run
 `node backend/scripts/benchmark-stock-reconciliation.mjs` from the repository
 root. The script creates its own in-memory database and ignores deployed URI
 settings.
+
+On 2026-11-21, the synthetic fixture kept those same totals but placed 75
+layers at one item/location pair, offset by 71 pairs with three layers. This
+exercised a 50-layer first page and a distinct 25-layer second page. SKU search
+returned five balances, and location search returned two distinct 50-row pages.
+Two local runs reconciled all 5,000 balances with zero differences in 2,405
+and 2,259 ms; peak Node.js RSS was 453 and 511 MiB. The FIFO pages used the
+`itemId_1_locationId_1_receivedAt_1__id_1` index and examined 50 and 25
+documents. The SKU substring lookup scanned all 1,000 item documents, while
+its five-balance result used the item/location index. The first location
+balance page examined 250 documents using `_id_`. These are local query-plan
+and correctness observations, not evidence of Atlas latency, concurrent users
+or an approved staging run. Substring item search should be remeasured if the
+catalog grows materially beyond the agreed 1,000-SKU baseline.
 
 A separate local authentication probe ran the compiled reconciliation job with
 `NODE_ENV=production` against an authenticated in-memory replica set using a

@@ -155,7 +155,12 @@ audit records. A missing-configuration check verifies a generic failure and
 nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
 and nightly-operation gates.
 Nightly scheduling, alert delivery and a representative-volume run remain
-deployment tasks. No reconciliation result automatically changes stock.
+deployment tasks. A local fixture at the agreed launch totals verified SKU
+and location search, two distinct balance pages and two FIFO pages for a
+75-layer item/location pair. The FIFO page query used its compound index;
+case-insensitive substring SKU lookup scanned all 1,000 item records. These
+observations do not establish deployed performance. No reconciliation result
+automatically changes stock.
 Unrepresentable Decimal128 quantities now fail with a client error before an
 approval request or physical count entry can be recorded; direct engine calls
 reject them without stock writes. The local staging integration suite passes
