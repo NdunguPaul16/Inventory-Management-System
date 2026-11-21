@@ -33,13 +33,17 @@ compiled `reconcile:stock` job is tested against an in-memory replica set for a
 clean ledger, a one-cent difference and missing database configuration. Local
 results do not establish deployed behavior or representative-volume performance.
 An isolated local integration of Phase 2 with the staging security branch passed
-347 automated tests (3 shared, 215 backend, 129 frontend), lint, formatting,
+350 automated tests (3 shared, 218 backend, 129 frontend), lint, formatting,
 typecheck, normal and staging builds, and three build-artifact checks. The
 integrated branch separately passed the FIFO engine coverage gate: 91.35% of
 lines (391/428), with 90.9% for `service.ts`. The staging reconciliation command
 also has a local regression proving that an `ims` database target fails the
 isolation preflight before the job connects. The integration branch has not been
 pushed or deployed.
+Oversized quantities that MongoDB Decimal128 cannot represent now receive a
+client error before an opening or adjustment approval request or a physical
+count entry is recorded. Direct engine calls reject the same input before
+writing stock. Three local regressions cover these boundaries.
 
 On 2026-11-20, `backend/scripts/benchmark-stock-reconciliation.mjs` created a
 fresh local in-memory replica set with the launch baseline of 1,000 SKUs,
