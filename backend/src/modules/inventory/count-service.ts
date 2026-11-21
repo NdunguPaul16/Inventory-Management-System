@@ -21,6 +21,7 @@ import {
   postSerialCountVariance,
 } from './engine/service.js';
 import { StockCount, type StockCountDoc } from './count-model.js';
+import { stockDecimal128 } from './quantity.js';
 
 type FreezeInput = z.infer<typeof freezeStockCountSchema>;
 type EntryInput = z.infer<typeof enterStockCountSchema>;
@@ -192,8 +193,8 @@ export async function enterStockCount(countId: string, input: EntryInput, actorI
       throw AppError.badRequest('Inbound unit cost applies only to a positive variance');
     await assertBookUnchanged(count, session);
     const before = publicCount(count);
-    count.countedQuantity = Types.Decimal128.fromString(counted.toString());
-    count.varianceQuantity = Types.Decimal128.fromString(variance.toString());
+    count.countedQuantity = stockDecimal128(counted);
+    count.varianceQuantity = stockDecimal128(variance);
     if (input.inboundUnitCost !== undefined) count.inboundUnitCost = input.inboundUnitCost;
     count.reason = input.reason;
     count.countedBy = actor;

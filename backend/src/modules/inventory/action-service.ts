@@ -22,6 +22,7 @@ import { nextDocumentNumber } from '../counters/service.js';
 import { StockAction, type StockActionDoc, type StockActionType } from './action-model.js';
 import { Item } from './items/model.js';
 import { Location } from './locations/model.js';
+import { assertRepresentableStockQuantity } from './quantity.js';
 
 type ReversalRequest = { movementId: string; reason: string };
 type ActionPayload = OpeningStockInput | OpeningStockBatchInput | AdjustmentInput | ReversalRequest;
@@ -91,6 +92,13 @@ export async function createStockAction(
 ) {
   requireActionPermission(permissions, actionType, 'request');
   const requester = id(actorId, 'actorId');
+  if (actionType === 'OPENING' || actionType === 'ADJUSTMENT') {
+    assertRepresentableStockQuantity((payload as OpeningStockInput | AdjustmentInput).quantity);
+  } else if (actionType === 'OPENING_BATCH') {
+    for (const line of (payload as OpeningStockBatchInput).lines) {
+      assertRepresentableStockQuantity(line.quantity);
+    }
+  }
   if (actionType === 'REVERSAL') {
     const movementId = id((payload as ReversalRequest).movementId, 'movementId');
     if (!(await StockMovement.exists({ _id: movementId }))) {

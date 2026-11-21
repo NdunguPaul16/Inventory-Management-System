@@ -140,6 +140,41 @@ async function authorizationWithPermissions(granted: string[], systemManager = f
   return `Bearer ${token}`;
 }
 
+describe('stock request quantity validation', () => {
+  it('rejects unpostable quantities before creating or auditing an approval request', async () => {
+    const quantity = '9'.repeat(35);
+    const sourceDoc = { type: 'OPENING_SHEET', id: randomUUID(), number: 'INVALID-QTY' };
+    const stock = {
+      itemId: String(itemId),
+      locationId: String(locationId),
+      quantity,
+      unitCost: 0,
+    };
+    const requests = [
+      { path: 'opening-stock', body: { ...stock, sourceDoc } },
+      {
+        path: 'opening-stock/batches',
+        body: { sourceDoc, lines: [{ ...stock, lineId: '1' }] },
+      },
+      {
+        path: 'adjustments',
+        body: { ...stock, direction: 'IN', reason: 'Invalid quantity', sourceDoc },
+      },
+    ];
+    for (const entry of requests) {
+      const response = await request(app)
+        .post(`/api/v1/inventory/${entry.path}`)
+        .set('Authorization', authorization)
+        .send(entry.body)
+        .expect(400);
+      expect(response.body.error.code).toBe('BAD_REQUEST');
+    }
+    expect(await StockAction.countDocuments()).toBe(0);
+    expect(await AuditLog.countDocuments()).toBe(0);
+    expect(await Counter.countDocuments()).toBe(0);
+  });
+});
+
 describe('stock request authorization before lookup', () => {
   it.each(['approve', 'reject', 'post'] as const)(
     'denies %s for existing and nonexistent requests without disclosing existence',
