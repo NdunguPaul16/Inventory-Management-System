@@ -137,7 +137,7 @@ transfer and reversal tests cover value conservation; a full valuation report
 and late landed-cost effects remain later-phase work.
 The backend now enforces a per-file 90% line-coverage gate for the FIFO engine
 through `npm run test:engine:coverage -w backend`. The latest local result is
-91.35% engine lines and 90.9% for `service.ts` (116 backend tests); branch coverage
+91.35% engine lines and 90.9% for `service.ts` (118 backend tests); branch coverage
 is 81.45%, so this does not establish comprehensive branch coverage. A serial
 receipt regression test also exposed and corrected a Mongoose transaction
 option required when creating multiple serial records. These changes have not
@@ -154,10 +154,16 @@ and a one-cent drift, confirming its exit codes and that it writes no stock or
 audit records. A missing-configuration check verifies a generic failure and
 nonzero exit. `docs/phase-2-stock-acceptance.md` records the remaining staging
 and nightly-operation gates.
-Nightly scheduling, alert delivery and a representative-volume run remain
-deployment tasks. No reconciliation result automatically changes stock.
-The complete local suite currently passes 201 tests across shared, backend and
-frontend; this is not staging acceptance evidence.
+An isolated local benchmark at the agreed launch baseline (1,000 SKUs,
+5 locations, 20,000 FIFO layers and 100,000 movements) found zero differences
+in two runs under four seconds each. A separate local authenticated MongoDB
+test confirmed that the compiled reconciliation job works with `read@ims_staging`
+and cannot write stock. These results do not establish deployed performance or
+Atlas permissions. Nightly scheduling, delivered alerts and a **staging** run
+at representative volume remain deployment tasks. No reconciliation result
+automatically changes stock. The complete local suite currently passes 202
+tests across shared, backend and frontend; this is not staging acceptance
+evidence.
 The FIFO layer API and item detail now page layers in receipt order, with a
 bounded query and an explicit load-more action. Representative-volume staging
 validation remains pending.
