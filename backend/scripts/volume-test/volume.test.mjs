@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import process from 'node:process';
 import { test } from 'node:test';
@@ -21,12 +22,16 @@ import { assertVolumeTarget, expectedVolume, parseScale } from './guard.mjs';
 import { fixtureBatches } from './fixture.mjs';
 
 const approvedHost = 'disposable.example.mongodb.net';
+const fixturePassword = randomUUID();
+const fixtureUri = new URL(`mongodb+srv://${approvedHost}/ims_volume_trial`);
+fixtureUri.username = 'fixture';
+fixtureUri.password = fixturePassword;
 const baseEnv = {
   NODE_ENV: 'production',
   STAGING_ATLAS_HOST: 'operational.example.mongodb.net',
   PRODUCTION_ATLAS_HOST: 'production.example.mongodb.net',
   MONGODB_DB_NAME: 'ims_volume_trial',
-  MONGODB_URI: 'mongodb+srv://fixture:secret@disposable.example.mongodb.net/ims_volume_trial',
+  MONGODB_URI: fixtureUri.toString(),
 };
 
 test('guard accepts only a separately pinned disposable target and matching effective database', () => {
@@ -81,7 +86,7 @@ test('every CLI fails before attempting a connection while the host allowlist is
     assert.equal(result.status, 1);
     assert.ok(!result.error);
     assert.equal(result.stdout, '');
-    assert.ok(!result.stderr.includes('fixture:secret'));
+    assert.ok(!result.stderr.includes(fixturePassword));
   }
 });
 
