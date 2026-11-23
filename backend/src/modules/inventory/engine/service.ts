@@ -1148,14 +1148,26 @@ export async function getMovementHistory(
   return StockMovement.find(filter).sort({ _id: -1 }).limit(limit).lean();
 }
 
-async function reconcileBalancesInSession(session: ClientSession) {
+export interface ReconciliationScanCounts {
+  balances: number;
+  layers: number;
+  movements: number;
+}
+
+async function reconcileBalancesInSession(
+  session: ClientSession,
+  onScanned?: (counts: ReconciliationScanCounts) => void,
+) {
+  const scanned: ReconciliationScanCounts = { balances: 0, layers: 0, movements: 0 };
   const balanceMap = new Map<string, { onHand: Types.Decimal128; value: number }>();
   for await (const balance of StockBalance.find().session(session).lean().cursor()) {
+    scanned.balances += 1;
     balanceMap.set(`${balance.itemId}:${balance.locationId}`, balance);
   }
   const layerMap = new Map<string, { quantity: Decimal; value: number }>();
   const movementMap = new Map<string, { quantity: Decimal; value: number }>();
   for await (const layer of CostLayer.find().session(session).lean().cursor()) {
+    scanned.layers += 1;
     const key = `${layer.itemId}:${layer.locationId}`;
     const aggregate = layerMap.get(key) ?? { quantity: new Quantity(0), value: 0 };
     const quantity = asDecimal(layer.remainingQty);
@@ -1164,6 +1176,7 @@ async function reconcileBalancesInSession(session: ClientSession) {
     layerMap.set(key, aggregate);
   }
   for await (const movement of StockMovement.find().session(session).lean().cursor()) {
+    scanned.movements += 1;
     const key = `${movement.itemId}:${movement.locationId}`;
     const aggregate = movementMap.get(key) ?? { quantity: new Quantity(0), value: 0 };
     const quantity = asDecimal(movement.quantity);
@@ -1210,17 +1223,36 @@ async function reconcileBalancesInSession(session: ClientSession) {
       });
     }
   }
+  onScanned?.(scanned);
   return { checked: allKeys.size, differences };
 }
 
 /** Compare all three ledger views at one committed MongoDB snapshot. */
-export async function reconcileBalances() {
+export async function reconcileBalances(
+  onScanned?: (counts: ReconciliationScanCounts) => void,
+  options: { singleAttempt?: boolean } = {},
+) {
   const session = await mongoose.startSession();
   try {
-    const result = await session.withTransaction(() => reconcileBalancesInSession(session), {
-      readConcern: { level: 'snapshot' },
-    });
+    let committedScans: ReconciliationScanCounts | undefined;
+    let result: Awaited<ReturnType<typeof reconcileBalancesInSession>> | undefined;
+    if (options.singleAttempt) {
+      session.startTransaction({ readConcern: { level: 'snapshot' } });
+      try {
+        result = await reconcileBalancesInSession(session, (counts) => (committedScans = counts));
+        await session.commitTransaction();
+      } catch (error) {
+        if (session.inTransaction()) await session.abortTransaction();
+        throw error;
+      }
+    } else {
+      result = await session.withTransaction(
+        () => reconcileBalancesInSession(session, (counts) => (committedScans = counts)),
+        { readConcern: { level: 'snapshot' } },
+      );
+    }
     if (!result) throw new Error('Stock reconciliation did not complete');
+    if (committedScans) onScanned?.(committedScans);
     return result;
   } finally {
     await session.endSession();
