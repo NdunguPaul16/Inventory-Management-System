@@ -6,6 +6,7 @@ export const LOGIN_PATH = '/api/v1/auth/login';
 export const STAGING_BACKEND = 'https://inventory-inc-staging-backend.onrender.com';
 const ASSERTION_HEADER = 'x-ims-staging-login-assertion';
 const MAX_BODY_BYTES = 8_192;
+const STAGING_BRANCHES = new Set(['staging/security-audit', 'integration/phase-2-security']);
 
 function failure(status: 400 | 405 | 413 | 503): Response {
   const unavailable = status === 503;
@@ -30,7 +31,7 @@ function canonicalIp(value: string | null): string | null {
 function stagingKey(source: NodeJS.ProcessEnv): Buffer | null {
   if (
     source.VERCEL_ENV !== 'preview' ||
-    source.VERCEL_GIT_COMMIT_REF !== 'staging/security-audit'
+    !STAGING_BRANCHES.has(source.VERCEL_GIT_COMMIT_REF ?? '')
   ) {
     return null;
   }

@@ -84,6 +84,19 @@ describe('staging Vercel login Function', () => {
     expect(identity(assertion(first))).toBe(identity(assertion(repeat)));
   });
 
+  it.each(['staging/security-audit', 'integration/phase-2-security'])(
+    'forwards login from approved Preview branch %s',
+    async (branch) => {
+      const fetcher = mockFetch();
+      const response = await handleStagingLogin(login(), {
+        ...options(fetcher),
+        source: { ...source, VERCEL_GIT_COMMIT_REF: branch },
+      });
+      expect(response.status).toBe(200);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it.each([401, 429, 503])('preserves JSON status %i and safe retry headers', async (status) => {
     const fetcher = mockFetch(status, { 'retry-after': '42' });
     const response = await handleStagingLogin(login(), options(fetcher));
@@ -94,7 +107,16 @@ describe('staging Vercel login Function', () => {
 
   it.each([
     ['production', { ...source, VERCEL_ENV: 'production' }],
+    [
+      'production integration branch',
+      {
+        ...source,
+        VERCEL_ENV: 'production',
+        VERCEL_GIT_COMMIT_REF: 'integration/phase-2-security',
+      },
+    ],
     ['wrong branch', { ...source, VERCEL_GIT_COMMIT_REF: 'dfstock' }],
+    ['missing branch', { ...source, VERCEL_GIT_COMMIT_REF: undefined }],
     ['missing key', { ...source, STAGING_LOGIN_GATEWAY_KEY_CURRENT: undefined }],
   ])('fails closed for %s deployment configuration', async (_name, config) => {
     const fetcher = mockFetch();
@@ -136,7 +158,7 @@ describe('staging Vercel login Function', () => {
     expect(vercel.rewrites[1]?.destination).toBe('/index.html');
   });
 
-  it('blocks a Vercel production or wrong-branch build and admits only staging Preview', () => {
+  it('blocks production and wrong-branch builds while admitting approved Previews', () => {
     const script = resolve(process.cwd(), 'scripts/check-login-gateway-context.mjs');
     const run = (env: Record<string, string>) =>
       spawnSync(process.execPath, [script], {
@@ -147,9 +169,22 @@ describe('staging Vercel login Function', () => {
       run({ VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'staging/security-audit' }).status,
     ).toBe(0);
     expect(
+      run({ VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'integration/phase-2-security' }).status,
+    ).toBe(0);
+    expect(
       run({ VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'staging/security-audit' }).status,
     ).not.toBe(0);
+    expect(
+      run({ VERCEL_ENV: 'production', VERCEL_GIT_COMMIT_REF: 'integration/phase-2-security' })
+        .status,
+    ).not.toBe(0);
     expect(run({ VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'dfstock' }).status).not.toBe(0);
+    expect(
+      run({
+        VERCEL_ENV: 'preview',
+        VERCEL_GIT_COMMIT_REF: 'refs/heads/integration/phase-2-security',
+      }).status,
+    ).not.toBe(0);
     expect(run({}).status).not.toBe(0);
   });
 });

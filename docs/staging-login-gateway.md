@@ -12,9 +12,11 @@ proxy trust or normal production authentication.
   over the broad `/api/:path*` rewrite. Verify this in the actual Preview before
   relying on the gateway. Other API paths keep the existing rewrite.
 - The Function runs only when `VERCEL_ENV=preview` and
-  `VERCEL_GIT_COMMIT_REF=staging/security-audit`. The staging branch's Vercel
-  build also fails outside that context. A normal local Vite build excludes
-  Function code from `frontend/dist/`.
+  `VERCEL_GIT_COMMIT_REF` is `staging/security-audit` or
+  `integration/phase-2-security`. The Vercel build fails outside those exact
+  contexts. Confirm Preview protection in the Vercel project before releasing
+  either branch; the branch guard cannot verify that project setting. A normal
+  local Vite build excludes Function code from `frontend/dist/`.
 - The Function reads Vercel's overwritten `X-Forwarded-For` value, requires one
   canonical IP, and HMAC-pseudonymizes it. The backend receives no raw client IP.
   It forwards one normalized login POST to the pinned staging Render origin,

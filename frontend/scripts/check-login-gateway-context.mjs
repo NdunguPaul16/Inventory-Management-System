@@ -1,10 +1,11 @@
 import process from 'node:process';
 
-// This script runs only for a Vercel build of the staging branch. Local normal
-// frontend builds do not discover or bundle the server-side login Function.
+// This script runs only for a Vercel Preview build of an approved staging branch.
+// Local normal frontend builds do not discover or bundle the server-side Function.
+const stagingBranches = new Set(['staging/security-audit', 'integration/phase-2-security']);
 if (
   process.env.VERCEL_ENV !== 'preview' ||
-  process.env.VERCEL_GIT_COMMIT_REF !== 'staging/security-audit'
+  !stagingBranches.has(process.env.VERCEL_GIT_COMMIT_REF)
 ) {
   process.stderr.write('Staging login gateway requires the protected staging Preview\n');
   process.exitCode = 1;
