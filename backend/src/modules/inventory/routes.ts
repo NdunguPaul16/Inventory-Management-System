@@ -42,7 +42,6 @@ import {
   createOpeningImport,
   getStockAction,
   listStockActions,
-  permittedStockActionTypes,
   postStockAction,
   rejectStockAction,
 } from './action-service.js';
@@ -82,17 +81,6 @@ function permissions(res: Response): readonly string[] {
   const granted = res.locals.auth?.permissions;
   if (!granted) throw AppError.unauthenticated();
   return granted;
-}
-
-function requireStockActionOperation(operation: 'approve' | 'post'): RequestHandler {
-  return (_req, res, next) => {
-    const granted = res.locals.auth?.permissions;
-    if (!granted) return next(AppError.unauthenticated('Sign in is required'));
-    if (permittedStockActionTypes(granted, operation).length === 0) {
-      return next(AppError.forbidden());
-    }
-    return next();
-  };
 }
 
 export const inventoryRoutes = Router();
@@ -281,7 +269,11 @@ inventoryRoutes.get(
 
 inventoryRoutes.post(
   '/requests/:requestId/approve',
-  requireStockActionOperation('approve'),
+  requireAnyPermission(
+    'inventory.opening.approve',
+    'inventory.adjustments.approve',
+    'inventory.movements.reverse.approve',
+  ),
   requireStockApproverRole,
   validate({ params: requestParams }),
   async (_req, res) => {
@@ -293,7 +285,11 @@ inventoryRoutes.post(
 
 inventoryRoutes.post(
   '/requests/:requestId/reject',
-  requireStockActionOperation('approve'),
+  requireAnyPermission(
+    'inventory.opening.approve',
+    'inventory.adjustments.approve',
+    'inventory.movements.reverse.approve',
+  ),
   requireStockApproverRole,
   validate({ params: requestParams, body: rejectStockActionSchema }),
   async (_req, res) => {
@@ -311,7 +307,11 @@ inventoryRoutes.post(
 
 inventoryRoutes.post(
   '/requests/:requestId/post',
-  requireStockActionOperation('post'),
+  requireAnyPermission(
+    'inventory.opening.post',
+    'inventory.adjustments.post',
+    'inventory.movements.reverse.post',
+  ),
   requireStockApproverRole,
   validate({ params: requestParams }),
   async (_req, res) => {
