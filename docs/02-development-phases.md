@@ -168,6 +168,9 @@ approval request or physical count entry can be recorded; direct engine calls
 reject them without stock writes. The local staging integration suite passes
 350 tests (3 shared, 218 backend, 129 frontend); this is not deployed staging
 acceptance evidence.
+At the 2026-11-24 handover, integration CI at `45e6ddb` passed 369 tests;
+the separate cloud-volume and live Cron/email/watchdog gates remain deferred,
+not passed (see `docs/phase-2-completion-handover.md`).
 The FIFO layer API and item detail now page layers in receipt order, with a
 bounded query and an explicit load-more action. Representative-volume staging
 validation remains pending.

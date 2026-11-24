@@ -44,6 +44,51 @@ services:
         sync: false
 ```
 
+## Manual Render Dashboard setup after separate approval
+
+Creating a Cron Job creates a billable scheduled service; this procedure is
+**not an activation instruction for the current release**. Render evaluates
+schedule expressions in UTC and charges a minimum of $1 per Cron Job per month
+([Cron Jobs](https://render.com/docs/cronjobs)). Before clicking **Create**, the
+operator must verify the intended branch contains the reviewed reconciliation
+commit, the staging-only Atlas identity and network allowlist are ready, the
+sender domain is verified, and a controlled first-run and rollback window is
+approved.
+
+1. In Render, choose **New > Cron Job** and the existing
+   `NdunguPaul16/Inventory-Management-System` repository. Name the service
+   `inventory-inc-staging-stock-reconciliation`. Use the approved staging branch
+   containing this job; the proposed `staging/security-audit` branch must first
+   receive the reviewed code. Leave **Root Directory** blank so npm workspaces
+   resolve from the repository root. Select the staging-compatible region and
+   the provisional **1c-2g** instance, subject to a separate capacity/cost
+   decision.
+2. Set **Schedule** to `0 23 * * *` (23:00 UTC, 02:00 EAT the next day),
+   **Build Command** to
+   `npm ci --include=dev && npm run build:shared && npm run build:staging -w backend`,
+   and the Cron **Command** to `npm run reconcile:stock:staging -w backend`.
+   Confirm **Auto-Deploy Off**. If the creation form cannot set this before
+   creation, stop and separately review the initial build/deploy and the
+   immediate Settings change; do not assume the new service will be inert.
+3. Add only the server-side environment variable names listed in the example
+   above. `NODE_ENV=production` and `MONGODB_DB_NAME=ims_staging` are literal
+   values; store the URI, both host pins and email settings as protected values
+   in this service. The Atlas identity must have only `read@ims_staging` on the
+   staging cluster. Do not attach a production environment group or copy the
+   web service's authentication, Valkey or gateway secrets.
+4. Before creation, record the reviewed Git SHA, service settings, Atlas role,
+   alert recipients and recovery owner. After a separately authorised creation,
+   check the deployed SHA, isolation preflight, Runs/Logs and actual email
+   delivery with a controlled run. Render's manual **Trigger Run** cancels an
+   active run, so first confirm no run is active. Configure an independent
+   failure notification path; an in-process email cannot report a missing or
+   killed run. Keep the separate watchdog inactive until its scheduler and
+   durable run state are reviewed and deployed.
+
+Render documents Auto-Deploy Off under the service's **Settings** page
+([Deploying on Render](https://render.com/docs/deploys)). Do not create or trigger
+the Cron during offline preparation.
+
 `RECONCILE_EMAIL_API_KEY` is a server-only key for the Resend email API;
 `RECONCILE_EMAIL_FROM` must be a verified sender, and `RECONCILE_EMAIL_TO` is a
 comma-separated list of designated system administrators. Do not put these in

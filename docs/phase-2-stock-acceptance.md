@@ -38,8 +38,10 @@ typecheck, normal and staging builds, and three build-artifact checks. The
 integrated branch separately passed the FIFO engine coverage gate: 91.35% of
 lines (391/428), with 90.9% for `service.ts`. The staging reconciliation command
 also has a local regression proving that an `ims` database target fails the
-isolation preflight before the job connects. The integration branch has not been
-pushed or deployed.
+isolation preflight before the job connects. This paragraph records the earlier
+350-test local checkpoint. The integration branch was subsequently pushed;
+GitHub CI passed at `45e6ddb` with 369 automated tests. Deployment and full
+Phase 2 stock acceptance for that exact commit remain unverified.
 Oversized quantities that MongoDB Decimal128 cannot represent now receive a
 client error before an opening or adjustment approval request or a physical
 count entry is recorded. Direct engine calls reject the same input before
@@ -201,7 +203,9 @@ its own least-privilege credentials and an operator-verified host and database
 name. Do not use these measurements to change production capacity without
 review.
 
-Phase 2 release remains pending until the master-data prerequisite is reviewed
-and integrated, staging workflow checks, scheduled alert delivery and the
-representative-volume result are recorded. Passing local tests alone is not a
-release decision.
+Phase 2 production release remains pending until the stock-only branch has its
+own CI and release review, required indexes are verified, and staging workflow
+checks are recorded. Scheduled alert delivery and representative-volume cloud
+acceptance are **deferred, not passed**, while paid infrastructure is unavailable;
+any production exception requires an explicit risk decision. Passing local tests
+alone is not a release decision.
